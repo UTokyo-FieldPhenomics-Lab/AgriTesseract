@@ -4,4 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "geopandas>=1.1.1",
+    "rasterio>=1.4.3",
+    "streamlit>=1.49.1",
+    "streamlit-folium>=0.25.2",
+    "streamlit-image-annotation>=0.5.0",
+    "ultralytics>=8.3.203",
+]
