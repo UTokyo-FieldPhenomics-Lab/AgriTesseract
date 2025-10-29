@@ -8,26 +8,74 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QPushButton,
-    QTreeWidget,      # <--- 新增
-    QTreeWidgetItem,  # <--- 新增
-    QMenu,            # <--- 新增
-    QDialog,          # <--- 新增
+    QTreeWidget,      
+    QTreeWidgetItem,  
+    QMenu,            
+    QDialog,          
     QLabel,
-    QAbstractItemView # <--- 新增
+    QMessageBox,
+    QAbstractItemView 
 )
-from PySide6.QtGui import QAction, QColor # <--- 新增
-from PySide6.QtCore import QRectF, Qt, QPoint
+from PySide6.QtGui import QAction, QColor, QDragEnterEvent, QDropEvent, QDragMoveEvent
+from PySide6.QtCore import QRectF, Qt, QPoint, Signal
 
 # 确保 pyqtgraph 在 PySide6 模式下运行
-pg.setConfigOption('leftButtonPan', False) 
+# pg.setConfigOption('leftButtonPan', False) 
 
-# Z-Value 常量
-# 我们给不同类型的图层设置一个 "基础" Z 值
-# 这样点(Z=100)总是绘制在线(Z=50)之上，图像(Z=0)总是在最下面
-# 拖拽排序将在这个基础值之上增加一个小的偏移量
-Z_BASE_IMAGE = 0
-Z_BASE_LINE = 50
-Z_BASE_POINT = 100
+# -----------------------------------------------------------------
+# 自定义 QTreeWidget 子类
+# -----------------------------------------------------------------
+# 1. 创建一个 QTreeWidget 的子类
+class CustomDropTreeWidget(QTreeWidget):
+    
+    # 2. (推荐) 创建一个自定义信号，这是Qt的最佳实践
+    #    你可以在拖放完成后发射这个信号。
+    itemSuccessfullyDropped = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # 3. 在 __init__ 中设置拖放属性
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        
+        # 4. (推荐) 连接你自定义的信号到一个槽函数
+        # self.itemSuccessfullyDropped.connect(self.on_item_dropped)
+
+    def on_item_dropped(self):
+        # 8. 这是信号触发时调用的函数
+        print("dragged")
+
+    # 5. 重写 dragEnterEvent
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        # 我们必须 'accept' 这个事件，否则 dropEvent 永远不会被触发
+        # acceptProposedAction() 会自动处理来自 InternalMove 的数据
+        # event.acceptProposedAction()
+        super().dragEnterEvent(event)
+
+    # 6. 重写 dragMoveEvent
+    def dragMoveEvent(self, event: QDragMoveEvent):
+        # 同样，在移动时也要 'accept'
+        # event.acceptProposedAction()
+        super().dragMoveEvent(event)
+
+    # 7. 重写 dropEvent
+    def dropEvent(self, event: QDropEvent):
+        # 关键步骤：首先调用父类的 dropEvent
+        # 这将执行实际的 "InternalMove" 操作
+        super().dropEvent(event)
+        
+        # 检查拖放是否真的被接受并完成（例如，你没有拖放到一个无效的位置）
+        # event.isAccepted() 在 super().dropEvent() 后会是 True
+        if event.isAccepted():
+            # 现在，父类的操作已完成，执行我们的自定义操作
+            # 你可以直接在这里打印：
+            # print("dragged")
+            
+            # 或者（更好的做法）发射我们的自定义信号：
+            self.itemSuccessfullyDropped.emit()
 
 class LayerManagerDemo(QMainWindow):
     def __init__(self):
@@ -72,15 +120,9 @@ class LayerManagerDemo(QMainWindow):
         
         # [升级] 图层列表
         control_layout.addWidget(QLabel("图层列表 (可拖拽排序):"))
-        self.layer_tree_widget = QTreeWidget()
-        self.layer_tree_widget.setHeaderLabels(["图层 (Layers)"])
-        
-        # [特性 1] 启用拖拽
-        self.layer_tree_widget.setDragEnabled(True)
-        self.layer_tree_widget.setAcceptDrops(True)
-        self.layer_tree_widget.setDropIndicatorShown(True)
-        # 仅在内部移动
-        self.layer_tree_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        # self.layer_tree_widget = QTreeWidget()
+        self.layer_tree_widget = CustomDropTreeWidget()
+        self.layer_tree_widget.setHeaderLabels(["(Layers)"])
 
         # [特性 3] 启用右键菜单
         self.layer_tree_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -98,13 +140,18 @@ class LayerManagerDemo(QMainWindow):
         
         # [特性 1] 拖拽完成信号
         # 当拖拽操作完成, QTreeWidget 的 model 会发出 'rowsMoved' 信号
-        self.layer_tree_widget.model().rowsMoved.connect(self.update_z_order)
+        # [FIX 2] 连接到我们的自定义信号
+        # self.layer_tree_widget.orderChanged.connect(self.update_z_order)
+        self.layer_tree_widget.itemSuccessfullyDropped.connect(self.update_z_order)
 
-        # [特性 2] Checkbox 状态改变信号
+        # [特性 2] Checkbox/重命名 状态改变信号
         self.layer_tree_widget.itemChanged.connect(self.handle_item_changed)
         
         # [特性 3] 右键菜单信号
         self.layer_tree_widget.customContextMenuRequested.connect(self.open_context_menu)
+
+        # [新特性 1] 双击重命名
+        self.layer_tree_widget.itemDoubleClicked.connect(self.start_rename_from_doubleclick)
 
 
     def setup_plot(self):
@@ -127,7 +174,7 @@ class LayerManagerDemo(QMainWindow):
         layer_name = f"Points Layer {self.layer_counter}"
         
         # 注册图层，并传入 "z_base"
-        self.register_layer(item, layer_name, Z_BASE_POINT)
+        self.register_layer(item, layer_name)
 
     def add_image_layer(self):
         img_data = np.random.normal(size=(50, 50))
@@ -137,7 +184,7 @@ class LayerManagerDemo(QMainWindow):
         item.setLookupTable(pg.colormap.get('viridis').getLookupTable())
         
         layer_name = f"Image Layer {self.layer_counter}"
-        self.register_layer(item, layer_name, Z_BASE_IMAGE)
+        self.register_layer(item, layer_name)
 
     def add_line_layer(self):
         x = np.linspace(0, 100, 20) 
@@ -146,11 +193,11 @@ class LayerManagerDemo(QMainWindow):
         item = pg.PlotDataItem(x=x, y=y, pen=pg.mkPen(color, width=2))
         
         layer_name = f"Line Layer {self.layer_counter}"
-        self.register_layer(item, layer_name, Z_BASE_LINE)
+        self.register_layer(item, layer_name)
 
     # --- 核心管理逻辑 ---
 
-    def register_layer(self, item: pg.GraphicsObject, name: str, z_base: int):
+    def register_layer(self, item: pg.GraphicsObject, name: str):
         """
         核心函数：将一个新图层注册到系统
         """
@@ -161,7 +208,7 @@ class LayerManagerDemo(QMainWindow):
         
         # 2. 添加到 Python 字典 (用于逻辑跟踪)
         # 我们存储一个元组: (pyqtgraph_item, z_base)
-        self.layer_registry[name] = (item, z_base)
+        self.layer_registry[name] = item
         
         # --- [升级] UI 列表 (QTreeWidget) ---
         
@@ -170,17 +217,23 @@ class LayerManagerDemo(QMainWindow):
         self.layer_tree_widget.blockSignals(True)
         
         list_item = QTreeWidgetItem([name])
+
+        base_flags = Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEditable |Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         
         # [特性 2] 添加 Checkbox 并默认勾选
-        list_item.setFlags(list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        # list_item.setFlags(
+        #     list_item.flags() | 
+        #     Qt.ItemFlag.ItemIsUserCheckable | 
+        #     Qt.ItemFlag.ItemIsEditable |
+        #     Qt.ItemFlag.ItemIsDragEnabled
+        # )
+        list_item.setFlags(base_flags | Qt.ItemFlag.ItemIsDragEnabled)
         list_item.setCheckState(0, Qt.CheckState.Checked)
 
         # 新图层总是插在最顶部 (index 0)
         self.layer_tree_widget.insertTopLevelItem(0, list_item)
-        
         # 自动选中新添加的图层
         self.layer_tree_widget.setCurrentItem(list_item)
-        
         # 恢复信号
         self.layer_tree_widget.blockSignals(False)
         
@@ -206,26 +259,59 @@ class LayerManagerDemo(QMainWindow):
             layer_name = item_widget.text(0)
             
             # 2. 从注册表中获取 pyqt_item
-            if layer_name in self.layer_registry:
-                pyqt_item, z_base = self.layer_registry[layer_name]
+            if layer_name in self.layer_registry: # 注册表中只存储了 item
+                pyqt_item = self.layer_registry[layer_name]
                 
                 # 3. 计算新的 Z 值
-                # 列表顶部的项目 (i=0) 应该有最高的 Z 值
-                # 列表底部的项目 (i=count-1) 应该有最低的 Z 值
-                # 我们使用 z_base 来确保点总是在线之上
-                new_z = z_base + (count - i)
+                # 列表顶部的项目 (i=0) 应该有最高的 Z 值 (例如 100)
+                # 列表底部的项目 (i=count-1) 应该有最低的 Z 值 (例如 1)
+                new_z = count - i 
                 
                 pyqt_item.setZValue(new_z)
                 print(f"图层 '{layer_name}' Z-Value 设置为: {new_z}")
 
+    def process_rename(self, item_widget: QTreeWidgetItem, old_name: str, new_name: str):
+        """
+        [新特性 1] 处理重命名逻辑
+        """
+        # 1. 检查新名称是否已存在
+        if new_name in self.layer_registry:
+            QMessageBox.warning(self, "重命名失败", f"名称 '{new_name}' 已存在。")
+            # 阻止信号, 将文本改回旧名称
+            self.layer_tree_widget.blockSignals(True)
+            item_widget.setText(0, old_name)
+            self.layer_tree_widget.blockSignals(False)
+            return
+            
+        # 2. 更新注册表 (用新键替换旧键)
+        self.layer_registry[new_name] = self.layer_registry.pop(old_name)
+        print(f"图层已重命名: '{old_name}' -> '{new_name}'")
+
     def handle_item_changed(self, item_widget: QTreeWidgetItem, column: int):
+        """
+        处理 *所有* item 变化 (Checkbox 和 重命名)
+        """
+        if column != 0: 
+            return
+
+        # [新特性 1] 检查这是否是一个重命名事件
+        if hasattr(self, 'old_rename_key'):
+            old_name = self.old_rename_key
+            new_name = item_widget.text(0)
+            del self.old_rename_key # 清除标志
+            
+            if old_name != new_name:
+                self.process_rename(item_widget, old_name, new_name)
+        
+        # [特性 2] 否则, 假定这是一个 Checkbox 事件
+        else:
+            self.process_visibility_change(item_widget)
+
+    def process_visibility_change(self, item_widget: QTreeWidgetItem):
         """
         [特性 2] Checkbox 可见性
         当 Checkbox 状态改变时触发
-        """
-        if column != 0:
-            return # 我们只关心第一列
-            
+        """           
         layer_name = item_widget.text(0)
         pyqt_item, _ = self.layer_registry.get(layer_name, (None, 0))
         
@@ -267,6 +353,26 @@ class LayerManagerDemo(QMainWindow):
         # mapToGlobal 将小部件的本地坐标转换为屏幕的全局坐标
         context_menu.exec(self.layer_tree_widget.mapToGlobal(position))
 
+    # --- [新特性] 重命名辅助函数 ---
+    def start_rename_from_doubleclick(self, item_widget: QTreeWidgetItem, column: int):
+        """由双击触发"""
+        if column == 0:
+            self.start_rename_item(item_widget)
+            
+    def start_rename_from_menu(self, item_widget: QTreeWidgetItem):
+        """由右键菜单触发"""
+        self.start_rename_item(item_widget)
+
+    def start_rename_item(self, item_widget: QTreeWidgetItem):
+        """
+        [新特性 1] 重命名的入口点
+        """
+        # 1. 存储旧名称, 以便 itemChanged 信号知道这是一个重命名
+        self.old_rename_key = item_widget.text(0)
+        
+        # 2. 告诉 QTreeWidget 进入编辑模式
+        self.layer_tree_widget.editItem(item_widget, 0)
+
     def delete_layer(self, item_widget: QTreeWidgetItem):
         """
         [特性 3] 删除操作
@@ -275,7 +381,7 @@ class LayerManagerDemo(QMainWindow):
         
         if layer_name in self.layer_registry:
             # 1. 从 PlotWidget 中移除
-            pyqt_item, _ = self.layer_registry[layer_name]
+            pyqt_item = self.layer_registry[layer_name]
             self.plot_widget.removeItem(pyqt_item)
             
             # 2. 从注册表 (dict) 中删除
