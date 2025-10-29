@@ -234,7 +234,8 @@ class LargeTiffViewer(QMainWindow):
             data = self.dataset.read(
                 window=window,
                 out_shape=target_shape,
-                resampling=rasterio.enums.Resampling.bilinear,
+                # resampling=rasterio.enums.Resampling.bilinear,
+                resampling=rasterio.enums.Resampling.nearest,
                 boundless=True # Allow reading beyond file boundaries
             )
             # 正确计算每个波段的最小值/最大值
