@@ -6,11 +6,14 @@ import pyqtgraph as pg
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
+    QHBoxLayout,
     QVBoxLayout,
     QWidget,
     QPushButton,
     QFileDialog,
-    QMessageBox
+    QMessageBox,
+    QComboBox,
+    QLabel
 )
 from PySide6.QtCore import QTimer, QRectF
 
@@ -24,13 +27,22 @@ class LargeTiffViewer(QMainWindow):
 
         # 核心组件
         self.load_button = QPushButton("加载大型 GeoTIFF")
+        self.transparency_label = QLabel("透明度基于:")
+        self.transparency_combo = QComboBox()
         self.plot_widget = pg.PlotWidget()
         self.image_item = pg.ImageItem() # 我们将动态更新这个 Item
 
         # --- 布局 ---
         central_widget = QWidget()
         layout = QVBoxLayout(central_widget)
-        layout.addWidget(self.load_button)
+        
+        # 顶部控制栏布局
+        top_bar_layout = QHBoxLayout()
+        top_bar_layout.addWidget(self.load_button)
+        top_bar_layout.addWidget(self.transparency_label)
+        top_bar_layout.addWidget(self.transparency_combo)
+        layout.addLayout(top_bar_layout)
+        
         layout.addWidget(self.plot_widget)
         self.setCentralWidget(central_widget)
 
@@ -46,11 +58,14 @@ class LargeTiffViewer(QMainWindow):
 
         # --- 初始化 Plot ---
         self.setup_plot()
+        self.transparency_combo.setEnabled(False) # 初始时禁用
 
         # --- 信号连接 ---
         self.load_button.clicked.connect(self.load_file)
         # 关键: 连接视图变化信号到我们的"防抖"计时器
         self.plot_widget.sigRangeChanged.connect(self.on_view_changed)
+        # 当下拉菜单选项改变时，也触发图像更新
+        self.transparency_combo.currentIndexChanged.connect(self.on_view_changed)
 
     def setup_plot(self):
         self.plot_widget.setBackground('w')
@@ -82,6 +97,9 @@ class LargeTiffViewer(QMainWindow):
             self.dataset = rasterio.open(filepath)
             logger.info(f"=> loading geotiff: {filepath}")
             
+            # 加载文件后，填充透明度下拉菜单
+            self.populate_transparency_combo()
+
             # 2. 获取地理边界
             bounds = self.dataset.bounds
 
@@ -112,6 +130,33 @@ class LargeTiffViewer(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "加载错误", f"无法打开 GeoTIFF 文件:\n{str(e)}")
             self.dataset = None
+
+    def populate_transparency_combo(self):
+        """
+        根据加载的 GeoTIFF 文件信息，填充透明度选择下拉菜单
+        """
+        self.transparency_combo.clear()
+        
+        if not self.dataset:
+            self.transparency_combo.setEnabled(False)
+            return
+
+        # 添加默认的 "无透明" 选项
+        self.transparency_combo.addItem("None", -1) # -1 作为特殊标记
+
+        # 获取波段描述和颜色解释
+        descriptions = self.dataset.descriptions
+        color_interps = self.dataset.colorinterp
+        logger.debug(f"   descriptions: {descriptions}")
+        logger.debug(f"   color_interps: {color_interps}")
+
+        for i in range(1, self.dataset.count + 1):
+            desc = descriptions[i-1] or color_interps[i-1].name
+            label = f"Band {i} ({desc})"
+            self.transparency_combo.addItem(label, i-1) # 将波段号(1-based)存为 userData
+            logger.debug(f"   -> adding to label={label}, idx={i-1}")
+
+        self.transparency_combo.setEnabled(True)
 
     def on_view_changed(self):
         """
@@ -183,36 +228,66 @@ class LargeTiffViewer(QMainWindow):
         # - out_shape: 立即降采样到这个形状
         # - resampling: 降采样算法
         logger.info("=> Loading data from geotiff")
-        
-        # 选择波段 (RGB 或 灰度)
-        if self.dataset.count >= 3:
-            indexes = (1, 2, 3) # 读取 R, G, B
-        else:
-            indexes = 1 # 读取单波段
             
         try:
-            logger.debug(f"   reading geotiff with indexes: {indexes} | window: {window}, out_shape: {target_shape}")
+            logger.debug(f"   reading geotiff with window: {window}, out_shape: {target_shape}")
             data = self.dataset.read(
-                indexes=indexes,
                 window=window,
                 out_shape=target_shape,
                 resampling=rasterio.enums.Resampling.bilinear,
                 boundless=True # Allow reading beyond file boundaries
             )
-            logger.debug(f"   obtained data with shape{data.shape} and with value range ({data.min()}, {data.max()})")
+            # 正确计算每个波段的最小值/最大值
+            # axis=(1, 2) 表示沿着高度和宽度维度计算
+            logger.debug(f"   obtained data with shape {data.shape}, min per band: {data.min(axis=(1, 2))}, max per band: {data.max(axis=(1, 2))}")
         except Exception as e:
             logger.error(f"Rasterio 读取错误: {e}")
             return
 
-        # 5. 格式化数据以供 PyQtGraph 显示
-        logger.info("=> Transposing data for PyQtGraph display")
-        if data.ndim == 3:
+        # 5. 格式化数据以供 PyQtGraph 显示 (处理 nodata 和透明度)
+        logger.info("=> Formatting data for PyQtGraph display (handling nodata)")
+        
+        # 获取 nodata 值 (每个波段一个)
+        nodata_values = self.dataset.nodatavals
+        nodata = self.dataset.nodata
+        logger.debug(f"   nodata: {nodata} | nodata_values: {nodata_values}")
+        
+        # 从下拉菜单获取选择的透明度基准波段
+        transparency_band_idx = self.transparency_combo.currentData() # 返回我们之前存储的波段号
+
+        if data.ndim > 1: # 多波段情况
             # rasterio 读取为 (bands, height, width)
-            # pyqtgraph 需要 (height, width) 或 (height, width, bands)
+            # 转置为 (height, width, bands) 正常的表示方法
             # (B, H, W) -> (H, W, B)
             data = data.transpose((1, 2, 0))
-            logger.debug(f"   transposed data to shape{data.shape} and with value range ({data.min()}, {data.max()})")
-            
+
+            # 确定用于生成透明蒙版的波段和 nodata 值
+            mask_band_data = None
+
+            if transparency_band_idx == -1: # "None" 选项
+                logger.debug(f"   Dose not set transparency band, skip setting transparency")
+
+            if transparency_band_idx > 0: # 选择了特定波段
+                mask_band_data = data[:,:, transparency_band_idx]
+                logger.debug(f"   Using user-selected transparency: Band {transparency_band_idx}")
+                
+                # 创建一个 Alpha 通道, 默认为 255 (不透明)
+                # alpha = np.full((rgb.shape[0], rgb.shape[1], 1), 255, dtype=np.uint8)
+                # mask = (mask_band_data == nodata_val)
+                # alpha[mask] = 0 # 在 nodata 位置设置为透明
+                
+                # 合并 RGB 和 Alpha 通道
+                # data = np.concatenate([rgb, alpha], axis=2)
+
+                data[:,:,3] = mask_band_data
+
+        else: # 单波段情况
+            # 单波段数据 pyqtgraph 会自动处理，这里我们不特殊处理
+            pass
+
+        # 这里的 data 已经被转置为 (H, W, B) 或 (H, W, 4)
+        # axis=-1 指的是最后一个维度，即波段维度
+        logger.debug(f"   Final display data shape: {data.shape}, overall value range: ({data.min(axis=(0, 1))}, {data.max(axis=(0, 1))})")
 
         # 6. 更新 ImageItem
         logger.info("=> Updating ImageItem")
@@ -225,26 +300,9 @@ class LargeTiffViewer(QMainWindow):
         # 我们必须告诉 ImageItem，这个 (可能很小的) NumPy 数组
         # 对应于磁盘上的哪个地理矩形。
         logger.info("=> Updating image rect")
-        win_bounds = self.dataset.window_bounds(window)
-        logger.debug(f"   window_bounds: {win_bounds} with type: {type(win_bounds)}")
+        # win_bounds = self.dataset.window_bounds(window)
+        # logger.debug(f"   window_bounds: {win_bounds} with type: {type(win_bounds)}")
         
-       # [修正] 手动计算宽度和高度 (使用索引访问)
-        # win_bounds 是 (left, top, right, bottom)
-        # geo_left = win_bounds[0]
-        # geo_top = win_bounds[1]
-        # geo_right = win_bounds[2]
-        # geo_bottom = win_bounds[3]
-
-        # win_width = geo_right - geo_left
-        # win_height = geo_top - geo_bottom
-        
-        # img_rect = QRectF(
-        #     geo_left, 
-        #     geo_bottom, 
-        #     win_width, 
-        #     win_height
-        # )
-
         self.image_item.setRect(img_rect)
 
     def closeEvent(self, event):
