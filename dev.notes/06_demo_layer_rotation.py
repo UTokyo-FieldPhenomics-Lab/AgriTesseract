@@ -3,77 +3,135 @@ import pyqtgraph as pg
 from PySide6 import QtWidgets, QtCore, QtGui
 import numpy as np
 
-# 确保在 Qt Application 实例化之前设置这些选项
-# 使用抗锯齿，使旋转的线条和文字看起来更平滑
 pg.setConfigOption('antialias', True)
-# 设置浅色背景和深色前景
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
 
-class GlobalRotationDemo(QtWidgets.QWidget):
+class CustomRotatingViewBox(pg.ViewBox):
+    """
+    一个自定义的 ViewBox，它知道当前的旋转角度，
+    并重写 mouseDragEvent 以正确处理平移。
+    
+    此版本使用 QGIS 逻辑（最终修正版）：
+    1. 计算鼠标拖动对应的 *未旋转* 的数据向量 (map_delta)
+    2. 更新视图中心点：new_center = old_center - map_delta
+    3. ItemGroup 负责处理旋转渲染
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 注意：我们不再需要 self.current_angle
+        # self.current_angle = 0.0 
+        self.setMouseMode(pg.ViewBox.PanMode) 
+
+    def set_rotation(self, angle):
+        # ViewBox 不再需要知道旋转角度
+        pass
+
+    def mouseDragEvent(self, ev):
+        if self.state['mouseMode'] == pg.ViewBox.PanMode:
+            ev.accept()
+            
+            # 1. 计算鼠标在数据坐标系中的等效移动向量 (未旋转)
+            #    mapToView 会处理 Y 轴反转
+            p_now = self.mapToView(ev.pos())
+            p_last = self.mapToView(ev.lastPos())
+            
+            map_delta = p_now - p_last
+            
+            if map_delta == QtCore.QPointF(0, 0):
+                return
+
+            # ======================================================
+            # ### 关键修复：应用 QGIS 逻辑 (最终版) ###
+            # ======================================================
+            
+            # 1. 获取当前的视图矩形 (ViewBox 的状态)
+            current_rect = self.viewRect()
+            
+            # 2. 计算新的中心点
+            #    我们使用 "old_center - map_delta" 来实现“自然拖动”
+            new_center = current_rect.center() - map_delta
+            
+            # 3. 将视图矩形移动到新的中心
+            current_rect.moveCenter(new_center)
+            
+            # 4. 将 ViewBox 设置为这个新的矩形状态
+            self.setRange(current_rect, padding=0)
+
+            # ======================================================
+            # ### 修复结束 ###
+            # ======================================================
+        
+        else:
+            super().mouseDragEvent(ev)
+
+
+class BoundlessRotationDemo(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('PyQtGraph 全局旋转 Demo')
+        self.setWindowTitle('PyQtGraph 真正无界旋转 (QGIS 逻辑) Demo')
         self.setGeometry(100, 100, 800, 700)
         
-        # --- 1. 创建主布局 ---
+        # --- 1. 创建自定义 ViewBox 和 PlotWidget ---
+        self.view_box = CustomRotatingViewBox()
+        self.pw = pg.PlotWidget(viewBox=self.view_box)
+        
         self.main_layout = QtWidgets.QVBoxLayout(self)
-        
-        # --- 2. 创建 PlotWidget ---
-        self.pw = pg.PlotWidget()
-        
-        # !!! 关键：设置旋转的锚点为视图中心
-        # 否则，它将围绕 (0,0) 点（左上角）旋转
-        self.pw.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.pw.setResizeAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        
         self.main_layout.addWidget(self.pw)
+
+        # --- 2. 配置 PlotItem 和 ViewBox ---
+        plot_item = self.pw.getPlotItem()
+        plot_item.hideAxis('left')
+        plot_item.hideAxis('bottom')
+        plot_item.hideButtons()
         
-        # --- 3. 添加绘图内容 ---
+        plot_item.setClipToView(False) 
+
+        self.view_box.setContentsMargins(0, 0, 0, 0)
+        self.view_box.setBorder(None)
+        
+        # --- 3. 创建一个 ItemGroup 来容纳所有
+        self.item_group = pg.ItemGroup()
+        self.view_box.addItem(self.item_group)
+        
+        self.rotation_center = pg.Point(50, 25)
+        self.item_group.setTransformOriginPoint(self.rotation_center)
+
+        # --- 4. 添加绘图内容到 ItemGroup ---
         self.add_plot_items()
         
-        # --- 4. 创建控制面板 ---
+        # --- 5. 创建控制面板 (相同) ---
         control_widget = QtWidgets.QWidget()
         control_layout = QtWidgets.QHBoxLayout(control_widget)
-        
-        control_layout.addWidget(QtWidgets.QLabel("全局旋转角度:"))
-        
-        # QDoubleSpinBox 完美符合您的所有要求：
-        # - 显示当前角度
-        # - 允许直接输入（按 Enter 或失去焦点时生效）
-        # - 自带上下调整按钮
+        control_layout.addWidget(QtWidgets.QLabel("Item 旋转角度:"))
         self.angle_spinbox = QtWidgets.QDoubleSpinBox()
-        self.angle_spinbox.setRange(-360.0, 360.0) # 允许旋转范围
-        self.angle_spinbox.setValue(0.0)           # 默认初始 0.0°
-        self.angle_spinbox.setSingleStep(1.0)      # 步长为 1°
-        self.angle_spinbox.setSuffix(" °")         # 单位
-        self.angle_spinbox.setKeyboardTracking(False) # 仅在按 Enter 或失去焦点时应用
-        
+        self.angle_spinbox.setRange(-360.0, 360.0)
+        self.angle_spinbox.setValue(0.0)
+        self.angle_spinbox.setSingleStep(1.0)
+        self.angle_spinbox.setSuffix(" °")
+        self.angle_spinbox.setKeyboardTracking(False) 
         control_layout.addWidget(self.angle_spinbox)
-        control_layout.addStretch() # 推动控件到左侧
-        
+        control_layout.addStretch()
         self.main_layout.addWidget(control_widget)
         
-        # --- 5. 连接信号 ---
-        self.angle_spinbox.valueChanged.connect(self.apply_rotation)
+        # --- 6. 连接信号 ---
+        self.angle_spinbox.valueChanged.connect(self.apply_rotation_to_items)
         
-        # --- 6. 应用初始旋转 (0.0°) ---
-        self.apply_rotation()
+        # --- 7. 应用初始旋转 (0.0°) ---
+        self.apply_rotation_to_items()
 
     def add_plot_items(self):
-        # --- a. 添加随机 Raster 图层 ---
-        # 生成一些有结构的随机数据
+        # --- a. Raster ---
         img_data = np.random.normal(size=(200, 100))
-        img_data[20:80, 20:80] += 3.0 # 添加一个方块
-        img_data = pg.gaussianFilter(img_data, (5, 5)) # 应用高斯模糊
+        img_data[20:80, 20:80] += 3.0
+        img_data = pg.gaussianFilter(img_data, (5, 5))
         
         self.raster_item = pg.ImageItem(img_data)
-        # 设置图像在坐标系中的位置和大小
         self.raster_item.setRect(QtCore.QRectF(0, 0, 100, 50))
-        self.pw.addItem(self.raster_item)
+        self.item_group.addItem(self.raster_item)
         
-        # --- b. 添加随机 Point 图层 ---
+        # --- b. Points ---
         n = 100
         x = np.random.uniform(0, 100, n)
         y = np.random.uniform(0, 50, n)
@@ -81,36 +139,23 @@ class GlobalRotationDemo(QtWidgets.QWidget):
         brushes = [pg.mkBrush(r, g, b, 150) for r, g, b in np.random.randint(0, 255, (n, 3))]
         
         self.points_item = pg.ScatterPlotItem(x, y, size=sizes, brush=brushes, pen=None)
-        self.pw.addItem(self.points_item)
+        self.item_group.addItem(self.points_item)
         
-        # 设置初始视图范围
-        self.pw.setRange(xRange=(-20, 120), yRange=(-20, 70))
-        # 启用自动缩放，但保持长宽比
-        self.pw.getViewBox().setAspectLocked(True)
+        self.view_box.setRange(xRange=(-20, 120), yRange=(-20, 70)) 
+        self.view_box.setAspectLocked(True)
 
-    def apply_rotation(self):
-        """
-        获取 SpinBox 的值并将其应用为 PlotWidget 的变换
-        """
+    def apply_rotation_to_items(self):
         angle = self.angle_spinbox.value()
         
-        # 创建一个新的 2D 变换矩阵
-        transform = QtGui.QTransform()
-        
-        # 应用旋转（以度为单位）
-        transform.rotate(angle)
-        
-        # 将此变换设置给 QGraphicsView (PlotWidget)
-        self.pw.setTransform(transform)
+        # 只旋转 ItemGroup
+        # 将传入的角度反转，使其从逆时针变为顺时针
+        # PyQtGraph/Qt 默认为逆时针为正
+        # QGIS 等通常以顺时针为正
+        self.item_group.setRotation(-angle)
 
 
 if __name__ == '__main__':
-    # 1. 创建 QApplication
     app = QtWidgets.QApplication(sys.argv)
-    
-    # 2. 创建并显示窗口
-    demo = GlobalRotationDemo()
+    demo = BoundlessRotationDemo()
     demo.show()
-    
-    # 3. 运行事件循环
     sys.exit(app.exec())
