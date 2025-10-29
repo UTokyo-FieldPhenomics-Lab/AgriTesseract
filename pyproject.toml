@@ -6,9 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "geopandas>=1.1.1",
+    "loguru>=0.7.3",
+    "pyqtgraph>=0.13.7",
+    "pyside6>=6.10.0",
     "rasterio>=1.4.3",
-    "streamlit>=1.49.1",
-    "streamlit-folium>=0.25.2",
-    "streamlit-image-annotation>=0.5.0",
     "ultralytics>=8.3.203",
 ]
+
+[dependency-groups]
+dev = []
