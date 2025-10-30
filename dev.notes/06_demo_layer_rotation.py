@@ -1,11 +1,14 @@
 import sys
 import pyqtgraph as pg
-from PySide6 import QtWidgets, QtCore, QtGui
+# 导入 pg.QtGui 以便使用 QGraphicsRectItem
+from PySide6 import QtGui, QtCore, QtWidgets
 import numpy as np
 
 pg.setConfigOption('antialias', True)
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
+
+from loguru import logger
 
 
 class CustomRotatingViewBox(pg.ViewBox):
@@ -14,7 +17,6 @@ class CustomRotatingViewBox(pg.ViewBox):
     增加了 sigClicked 信号，以便在非 PanMode 下处理点击事件。
     """
     
-    # 定义一个新的信号，它将在 ViewBox 被点击时发出
     sigClicked = QtCore.Signal(object) 
     
     def __init__(self, *args, **kwargs):
@@ -55,7 +57,7 @@ class CustomRotatingViewBox(pg.ViewBox):
 class BoundlessRotationDemo(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('PyQtGraph - QGIS 逻辑与点信息提取 Demo')
+        self.setWindowTitle('PyQtGraph - QGIS 逻辑与像素高亮 Demo')
         self.setGeometry(100, 100, 800, 800)
         
         # --- 1. 创建自定义 ViewBox 和 PlotWidget ---
@@ -84,15 +86,20 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         # --- 4. 添加绘图内容到 ItemGroup ---
         self.add_plot_items()
         
-        # --- 5. 创建用于标记点击的红点 ---
-        self.clicked_point_marker = pg.ScatterPlotItem(
-            [], [], 
-            pen=None, 
-            brush=pg.mkBrush('r'), 
-            size=15,
-            symbol='o'
-        )
-        self.item_group.addItem(self.clicked_point_marker)
+        # ======================================================
+        # ### 新增：创建像素高亮矩形框 ###
+        # ======================================================
+        self.pixel_highlighter = QtWidgets.QGraphicsRectItem()
+        self.pixel_highlighter.setPen(pg.mkPen(None))
+        self.pixel_highlighter.setBrush(pg.mkBrush(255, 0, 0, 100))
+        
+        self.item_group.addItem(self.pixel_highlighter)
+        self.pixel_highlighter.hide() # 初始隐藏
+
+        # <<< 修复：设置 Z-value 以确保它绘制在 Raster 之上
+        self.pixel_highlighter.setZValue(100) 
+        # ======================================================
+
         
         # --- 6. 创建控制面板 (旋转角度) ---
         rotation_widget = QtWidgets.QWidget()
@@ -142,7 +149,7 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         self.on_mode_changed() 
 
     def add_plot_items(self):
-        # --- a. Raster (保持原始的灰度图像) ---
+        # --- a. Raster ---
         img_data = np.random.normal(size=(200, 100))
         img_data[20:80, 20:80] += 3.0
         img_data = pg.gaussianFilter(img_data, (5, 5))
@@ -152,19 +159,20 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         
         self.raster_item.setRect(QtCore.QRectF(0, 0, 100, 50))
         self.item_group.addItem(self.raster_item)
-        
+
+        self.raster_item.setZValue(0)         
         # --- b. Points ---
-        n = 100
-        x = np.random.uniform(0, 100, n)
-        y = np.random.uniform(0, 50, n)
-        sizes = np.random.uniform(5, 15, n)
-        brushes = [pg.mkBrush(r, g, b, 150) for r, g, b in np.random.randint(0, 255, (n, 3))]
+        # n = 100
+        # x = np.random.uniform(0, 100, n)
+        # y = np.random.uniform(0, 50, n)
+        # sizes = np.random.uniform(5, 15, n)
+        # brushes = [pg.mkBrush(r, g, b, 150) for r, g, b in np.random.randint(0, 255, (n, 3))]
         
-        self.points_item = pg.ScatterPlotItem(x, y, size=sizes, brush=brushes, pen=None)
-        self.item_group.addItem(self.points_item)
+        # self.points_item = pg.ScatterPlotItem(x, y, size=sizes, brush=brushes, pen=None)
+        # self.item_group.addItem(self.points_item)
         
-        self.view_box.setRange(xRange=(-20, 120), yRange=(-20, 70)) 
-        self.view_box.setAspectLocked(True)
+        # self.view_box.setRange(xRange=(-20, 120), yRange=(-20, 70)) 
+        # self.view_box.setAspectLocked(True)
 
     def apply_rotation_to_items(self):
         angle = self.angle_spinbox.value()
@@ -177,10 +185,9 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         if self.btn_pan.isChecked():
             self.view_box.setMouseMode(pg.ViewBox.PanMode)
             self.pw.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
-            self.clicked_point_marker.setData([], [])
+            self.pixel_highlighter.hide()
             
         elif self.btn_pick.isChecked():
-            # <<< 修复 1：使用 RectMode 替换 NoDrag
             self.view_box.setMouseMode(pg.ViewBox.RectMode)
             self.pw.setCursor(QtCore.Qt.CursorShape.CrossCursor)
 
@@ -191,35 +198,47 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         if not self.btn_pick.isChecked():
             return 
 
-        # ==================================
-        # 开始坐标转换链
-        # ==================================
-        
+        # --- 坐标转换链 ---
         p_view = self.view_box.mapToView(ev.pos())
         p_item_world = self.item_group.mapFromParent(p_view)
-        
-        self.clicked_point_marker.setData(x=[p_item_world.x()], y=[p_item_world.y()])
-        
         p_raster_local = self.raster_item.mapFromParent(p_item_world)
-
-        # <<< 修复 2：使用 dataTransform 替换 imageTransform
-        img_transform = self.raster_item.dataTransform()
         
+        img_transform = self.raster_item.dataTransform()
         inv_transform, invertible = img_transform.inverted()
         if not invertible:
             print("变换不可逆")
+            self.pixel_highlighter.hide()
             return
 
         p_pixel_index = inv_transform.map(p_raster_local)
         
-        row = int(p_pixel_index.y())
-        col = int(p_pixel_index.x())
+        row = int(np.floor(p_pixel_index.y()))
+        col = int(np.floor(p_pixel_index.x()))
         
         value_str = "图像边界之外"
+        
         if (0 <= row < self.image_data.shape[0]) and (0 <= col < self.image_data.shape[1]):
+            # --- 提取值 ---
             value = self.image_data[row, col]
             value_str = f"{value:.4f}"
+            
+            # --- 更新高亮框 ---
+            p_top_left = img_transform.map(QtCore.QPointF(col, row))
+            p_bottom_right = img_transform.map(QtCore.QPointF(col + 1, row + 1))
+            
+            pixel_rect = QtCore.QRectF(p_top_left, p_bottom_right)
+            
+            self.pixel_highlighter.setRect(pixel_rect)
+            logger.debug(f"pixel_rect = {pixel_rect}")
+            self.pixel_highlighter.show()
+            logger.debug(f"set pixel_highligher to show")
+            
+        else:
+            logger.debug(f"set pixel_highligher to hide")
+            self.pixel_highlighter.hide()
+
         
+        # --- 显示信息框 ---
         info_text = f"""
 <b>📍 点信息</b><br>
 --------------------------<br>
@@ -232,6 +251,7 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
 <b>像素值:</b><br>
 {value_str}
 """
+        logger.debug(info_text)
         QtWidgets.QMessageBox.information(self, "点信息", info_text)
 
 
