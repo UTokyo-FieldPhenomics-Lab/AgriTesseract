@@ -1,14 +1,12 @@
 import sys
 import pyqtgraph as pg
-# 导入 pg.QtGui 以便使用 QGraphicsRectItem
 from PySide6 import QtGui, QtCore, QtWidgets
 import numpy as np
+from loguru import logger
 
 pg.setConfigOption('antialias', True)
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
-
-from loguru import logger
 
 
 class CustomRotatingViewBox(pg.ViewBox):
@@ -86,19 +84,14 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         # --- 4. 添加绘图内容到 ItemGroup ---
         self.add_plot_items()
         
-        # ======================================================
-        # ### 新增：创建像素高亮矩形框 ###
-        # ======================================================
+        # --- 5. 创建像素高亮矩形框 ---
         self.pixel_highlighter = QtWidgets.QGraphicsRectItem()
         self.pixel_highlighter.setPen(pg.mkPen(None))
         self.pixel_highlighter.setBrush(pg.mkBrush(255, 0, 0, 100))
         
         self.item_group.addItem(self.pixel_highlighter)
-        self.pixel_highlighter.hide() # 初始隐藏
-
-        # <<< 修复：设置 Z-value 以确保它绘制在 Raster 之上
+        self.pixel_highlighter.hide()
         self.pixel_highlighter.setZValue(100) 
-        # ======================================================
 
         
         # --- 6. 创建控制面板 (旋转角度) ---
@@ -160,19 +153,18 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         self.raster_item.setRect(QtCore.QRectF(0, 0, 100, 50))
         self.item_group.addItem(self.raster_item)
 
-        self.raster_item.setZValue(0)         
-        # --- b. Points ---
-        # n = 100
-        # x = np.random.uniform(0, 100, n)
-        # y = np.random.uniform(0, 50, n)
-        # sizes = np.random.uniform(5, 15, n)
-        # brushes = [pg.mkBrush(r, g, b, 150) for r, g, b in np.random.randint(0, 255, (n, 3))]
+        self.raster_item.setZValue(0) 
         
-        # self.points_item = pg.ScatterPlotItem(x, y, size=sizes, brush=brushes, pen=None)
-        # self.item_group.addItem(self.points_item)
+        # --- b. Points (被注释掉了，没问题) ---
+        # ...
         
-        # self.view_box.setRange(xRange=(-20, 120), yRange=(-20, 70)) 
-        # self.view_box.setAspectLocked(True)
+        # ======================================================
+        # ### 修复 1：恢复 setRange 和 setAspectLocked ###
+        # ======================================================
+        # 这将修复视觉失真
+        self.view_box.setRange(xRange=(-20, 120), yRange=(-20, 70)) 
+        self.view_box.setAspectLocked(True)
+        # ======================================================
 
     def apply_rotation_to_items(self):
         angle = self.angle_spinbox.value()
@@ -203,10 +195,16 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         p_item_world = self.item_group.mapFromParent(p_view)
         p_raster_local = self.raster_item.mapFromParent(p_item_world)
         
+        # ======================================================
+        # ### 修复 2：恢复使用 dataTransform() ###
+        # 这是从像素索引 -> 局部坐标的正确变换
+        # ======================================================
         img_transform = self.raster_item.dataTransform()
         inv_transform, invertible = img_transform.inverted()
+        # ======================================================
+
         if not invertible:
-            print("变换不可逆")
+            logger.warning("变换不可逆")
             self.pixel_highlighter.hide()
             return
 
@@ -223,18 +221,21 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
             value_str = f"{value:.4f}"
             
             # --- 更新高亮框 ---
-            p_top_left = img_transform.map(QtCore.QPointF(col, row))
-            p_bottom_right = img_transform.map(QtCore.QPointF(col + 1, row + 1))
+            p_top_left_pixel = QtCore.QPointF(col, row)
+            p_bottom_right_pixel = QtCore.QPointF(col + 1, row + 1)
             
-            pixel_rect = QtCore.QRectF(p_top_left, p_bottom_right)
+            p_top_left_local = img_transform.map(p_top_left_pixel)
+            p_bottom_right_local = img_transform.map(p_bottom_right_pixel)
             
-            self.pixel_highlighter.setRect(pixel_rect)
-            logger.debug(f"pixel_rect = {pixel_rect}")
+            pixel_rect_local = QtCore.QRectF(p_top_left_local, p_bottom_right_local)
+            
+            # 将局部矩形映射到父级（ItemGroup）坐标系
+            pixel_rect_world = self.raster_item.mapRectToParent(pixel_rect_local)
+            
+            self.pixel_highlighter.setRect(pixel_rect_world)
             self.pixel_highlighter.show()
-            logger.debug(f"set pixel_highligher to show")
             
         else:
-            logger.debug(f"set pixel_highligher to hide")
             self.pixel_highlighter.hide()
 
         
