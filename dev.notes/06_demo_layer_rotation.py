@@ -10,68 +10,53 @@ pg.setConfigOption('foreground', 'k')
 
 class CustomRotatingViewBox(pg.ViewBox):
     """
-    一个自定义的 ViewBox，它知道当前的旋转角度，
-    并重写 mouseDragEvent 以正确处理平移。
-    
-    此版本使用 QGIS 逻辑（最终修正版）：
-    1. 计算鼠标拖动对应的 *未旋转* 的数据向量 (map_delta)
-    2. 更新视图中心点：new_center = old_center - map_delta
-    3. ItemGroup 负责处理旋转渲染
+    一个自定义的 ViewBox。
+    增加了 sigClicked 信号，以便在非 PanMode 下处理点击事件。
     """
+    
+    # 定义一个新的信号，它将在 ViewBox 被点击时发出
+    sigClicked = QtCore.Signal(object) 
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 注意：我们不再需要 self.current_angle
-        # self.current_angle = 0.0 
         self.setMouseMode(pg.ViewBox.PanMode) 
 
     def set_rotation(self, angle):
-        # ViewBox 不再需要知道旋转角度
         pass
 
     def mouseDragEvent(self, ev):
         if self.state['mouseMode'] == pg.ViewBox.PanMode:
             ev.accept()
-            
-            # 1. 计算鼠标在数据坐标系中的等效移动向量 (未旋转)
-            #    mapToView 会处理 Y 轴反转
             p_now = self.mapToView(ev.pos())
             p_last = self.mapToView(ev.lastPos())
-            
             map_delta = p_now - p_last
-            
             if map_delta == QtCore.QPointF(0, 0):
                 return
-
-            # ======================================================
-            # ### 关键修复：应用 QGIS 逻辑 (最终版) ###
-            # ======================================================
-            
-            # 1. 获取当前的视图矩形 (ViewBox 的状态)
             current_rect = self.viewRect()
-            
-            # 2. 计算新的中心点
-            #    我们使用 "old_center - map_delta" 来实现“自然拖动”
             new_center = current_rect.center() - map_delta
-            
-            # 3. 将视图矩形移动到新的中心
             current_rect.moveCenter(new_center)
-            
-            # 4. 将 ViewBox 设置为这个新的矩形状态
             self.setRange(current_rect, padding=0)
-
-            # ======================================================
-            # ### 修复结束 ###
-            # ======================================================
-        
         else:
+            ev.ignore()
             super().mouseDragEvent(ev)
+
+    def mouseClickEvent(self, ev):
+        """
+        覆盖 mouseClickEvent，无论当前模式如何，
+        都发出 sigClicked 信号。
+        """
+        if ev.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.sigClicked.emit(ev)
+            ev.accept()
+        else:
+            super().mouseClickEvent(ev)
 
 
 class BoundlessRotationDemo(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('PyQtGraph 真正无界旋转 (QGIS 逻辑) Demo')
-        self.setGeometry(100, 100, 800, 700)
+        self.setWindowTitle('PyQtGraph - QGIS 逻辑与点信息提取 Demo')
+        self.setGeometry(100, 100, 800, 800)
         
         # --- 1. 创建自定义 ViewBox 和 PlotWidget ---
         self.view_box = CustomRotatingViewBox()
@@ -85,9 +70,7 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         plot_item.hideAxis('left')
         plot_item.hideAxis('bottom')
         plot_item.hideButtons()
-        
         plot_item.setClipToView(False) 
-
         self.view_box.setContentsMargins(0, 0, 0, 0)
         self.view_box.setBorder(None)
         
@@ -101,33 +84,72 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
         # --- 4. 添加绘图内容到 ItemGroup ---
         self.add_plot_items()
         
-        # --- 5. 创建控制面板 (相同) ---
-        control_widget = QtWidgets.QWidget()
-        control_layout = QtWidgets.QHBoxLayout(control_widget)
-        control_layout.addWidget(QtWidgets.QLabel("Item 旋转角度:"))
+        # --- 5. 创建用于标记点击的红点 ---
+        self.clicked_point_marker = pg.ScatterPlotItem(
+            [], [], 
+            pen=None, 
+            brush=pg.mkBrush('r'), 
+            size=15,
+            symbol='o'
+        )
+        self.item_group.addItem(self.clicked_point_marker)
+        
+        # --- 6. 创建控制面板 (旋转角度) ---
+        rotation_widget = QtWidgets.QWidget()
+        rotation_layout = QtWidgets.QHBoxLayout(rotation_widget)
+        rotation_layout.addWidget(QtWidgets.QLabel("Item 旋转角度:"))
         self.angle_spinbox = QtWidgets.QDoubleSpinBox()
         self.angle_spinbox.setRange(-360.0, 360.0)
         self.angle_spinbox.setValue(0.0)
         self.angle_spinbox.setSingleStep(1.0)
         self.angle_spinbox.setSuffix(" °")
         self.angle_spinbox.setKeyboardTracking(False) 
-        control_layout.addWidget(self.angle_spinbox)
-        control_layout.addStretch()
-        self.main_layout.addWidget(control_widget)
+        rotation_layout.addWidget(self.angle_spinbox)
+        rotation_layout.addStretch()
+        self.main_layout.addWidget(rotation_widget)
         
-        # --- 6. 连接信号 ---
+        # --- 7. 创建工具栏 (模式切换) ---
+        toolbar = QtWidgets.QWidget()
+        toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.btn_pan = QtWidgets.QToolButton()
+        self.btn_pan.setText("正常查看模式")
+        self.btn_pan.setCheckable(True)
+
+        self.btn_pick = QtWidgets.QToolButton()
+        self.btn_pick.setText("选点模式")
+        self.btn_pick.setCheckable(True)
+
+        self.mode_button_group = QtWidgets.QButtonGroup(self)
+        self.mode_button_group.addButton(self.btn_pan)
+        self.mode_button_group.addButton(self.btn_pick)
+
+        toolbar_layout.addWidget(self.btn_pan)
+        toolbar_layout.addWidget(self.btn_pick)
+        toolbar_layout.addStretch()
+        self.main_layout.addWidget(toolbar)
+        
+        # --- 8. 连接信号 ---
         self.angle_spinbox.valueChanged.connect(self.apply_rotation_to_items)
+        self.btn_pan.toggled.connect(self.on_mode_changed)
+        self.btn_pick.toggled.connect(self.on_mode_changed)
+        self.view_box.sigClicked.connect(self.on_canvas_clicked)
         
-        # --- 7. 应用初始旋转 (0.0°) ---
+        # --- 9. 设置初始状态 ---
         self.apply_rotation_to_items()
+        self.btn_pan.setChecked(True)
+        self.on_mode_changed() 
 
     def add_plot_items(self):
-        # --- a. Raster ---
+        # --- a. Raster (保持原始的灰度图像) ---
         img_data = np.random.normal(size=(200, 100))
         img_data[20:80, 20:80] += 3.0
         img_data = pg.gaussianFilter(img_data, (5, 5))
         
-        self.raster_item = pg.ImageItem(img_data)
+        self.image_data = img_data 
+        self.raster_item = pg.ImageItem(self.image_data)
+        
         self.raster_item.setRect(QtCore.QRectF(0, 0, 100, 50))
         self.item_group.addItem(self.raster_item)
         
@@ -146,12 +168,71 @@ class BoundlessRotationDemo(QtWidgets.QWidget):
 
     def apply_rotation_to_items(self):
         angle = self.angle_spinbox.value()
-        
-        # 只旋转 ItemGroup
-        # 将传入的角度反转，使其从逆时针变为顺时针
-        # PyQtGraph/Qt 默认为逆时针为正
-        # QGIS 等通常以顺时针为正
         self.item_group.setRotation(-angle)
+
+    def on_mode_changed(self):
+        """
+        当工具栏按钮被点击时调用，用于切换模式。
+        """
+        if self.btn_pan.isChecked():
+            self.view_box.setMouseMode(pg.ViewBox.PanMode)
+            self.pw.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+            self.clicked_point_marker.setData([], [])
+            
+        elif self.btn_pick.isChecked():
+            # <<< 修复 1：使用 RectMode 替换 NoDrag
+            self.view_box.setMouseMode(pg.ViewBox.RectMode)
+            self.pw.setCursor(QtCore.Qt.CursorShape.CrossCursor)
+
+    def on_canvas_clicked(self, ev):
+        """
+        当 ViewBox 被点击时调用 (由 sigClicked 信号触发)
+        """
+        if not self.btn_pick.isChecked():
+            return 
+
+        # ==================================
+        # 开始坐标转换链
+        # ==================================
+        
+        p_view = self.view_box.mapToView(ev.pos())
+        p_item_world = self.item_group.mapFromParent(p_view)
+        
+        self.clicked_point_marker.setData(x=[p_item_world.x()], y=[p_item_world.y()])
+        
+        p_raster_local = self.raster_item.mapFromParent(p_item_world)
+
+        # <<< 修复 2：使用 dataTransform 替换 imageTransform
+        img_transform = self.raster_item.dataTransform()
+        
+        inv_transform, invertible = img_transform.inverted()
+        if not invertible:
+            print("变换不可逆")
+            return
+
+        p_pixel_index = inv_transform.map(p_raster_local)
+        
+        row = int(p_pixel_index.y())
+        col = int(p_pixel_index.x())
+        
+        value_str = "图像边界之外"
+        if (0 <= row < self.image_data.shape[0]) and (0 <= col < self.image_data.shape[1]):
+            value = self.image_data[row, col]
+            value_str = f"{value:.4f}"
+        
+        info_text = f"""
+<b>📍 点信息</b><br>
+--------------------------<br>
+<b>世界坐标 (X, Y):</b><br>
+({p_item_world.x():.2f}, {p_item_world.y():.2f})<br>
+<br>
+<b>光栅像素 (Col, Row):</b><br>
+({col}, {row})<br>
+<br>
+<b>像素值:</b><br>
+{value_str}
+"""
+        QtWidgets.QMessageBox.information(self, "点信息", info_text)
 
 
 if __name__ == '__main__':
