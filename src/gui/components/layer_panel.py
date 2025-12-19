@@ -31,6 +31,8 @@ from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QDragMoveEvent
 from loguru import logger
 
+from src.gui.i18n import tr
+
 
 class DraggableTreeWidget(QTreeWidget):
     """
@@ -132,15 +134,14 @@ class LayerPanel(QWidget):
 
         # Header
         header_layout = QHBoxLayout()
-        header_label = QLabel("图层")
-        header_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        header_label = QLabel(tr("layer_panel.title"))
         header_layout.addWidget(header_label)
         header_layout.addStretch()
         layout.addLayout(header_layout)
 
         # Tree widget for layers
         self._tree = DraggableTreeWidget()
-        self._tree.setHeaderLabels(["图层名称"])
+        self._tree.setHeaderLabels([tr("layer_panel.title")])
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(False)
         self._tree.setIndentation(0)
@@ -162,13 +163,13 @@ class LayerPanel(QWidget):
 
         self._btn_add = QPushButton("+")
         self._btn_add.setMaximumWidth(30)
-        self._btn_add.setToolTip("添加图层")
+        self._btn_add.setToolTip(tr("layer_panel.add_tooltip"))
         self._btn_add.clicked.connect(self._on_add_clicked)
         btn_layout.addWidget(self._btn_add)
 
         self._btn_remove = QPushButton("-")
         self._btn_remove.setMaximumWidth(30)
-        self._btn_remove.setToolTip("删除选中图层")
+        self._btn_remove.setToolTip(tr("layer_panel.remove_tooltip"))
         self._btn_remove.setEnabled(False)
         self._btn_remove.clicked.connect(self._on_remove_clicked)
         btn_layout.addWidget(self._btn_remove)
@@ -376,7 +377,11 @@ class LayerPanel(QWidget):
         """Process layer rename."""
         # Check if new name already exists
         if new_name in self._layers:
-            QMessageBox.warning(self, "重命名失败", f"名称 '{new_name}' 已存在。")
+            QMessageBox.warning(
+                self, 
+                tr("layer_panel.rename.fail.title"), 
+                tr("layer_panel.rename.fail.msg").format(name=new_name)
+            )
             # Revert to old name
             self._tree.blockSignals(True)
             layer_type = self._layers[old_name]['type']
@@ -430,14 +435,14 @@ class LayerPanel(QWidget):
         menu = QMenu(self)
 
         # Zoom to layer action
-        zoom_action = QAction("缩放到图层", self)
+        zoom_action = QAction(tr("layer_panel.menu.zoom"), self)
         zoom_action.triggered.connect(lambda: self._zoom_to_layer(name))
         menu.addAction(zoom_action)
 
         menu.addSeparator()
 
         # Delete action
-        delete_action = QAction("删除", self)
+        delete_action = QAction(tr("layer_panel.menu.delete"), self)
         delete_action.triggered.connect(lambda: self._delete_layer(name))
         menu.addAction(delete_action)
 
@@ -452,8 +457,8 @@ class LayerPanel(QWidget):
         """Delete a layer after confirmation."""
         reply = QMessageBox.question(
             self,
-            "删除图层",
-            f"确定要删除图层 '{name}' 吗？",
+            tr("layer_panel.confirm.delete.title"),
+            tr("layer_panel.confirm.delete.msg").format(name=name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 

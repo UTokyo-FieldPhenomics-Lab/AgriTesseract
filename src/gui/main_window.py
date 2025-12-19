@@ -1,12 +1,8 @@
 """
 Main Window for EasyPlantFieldID GUI Application.
 
-This module provides the main application window with Ribbon-style UI,
-featuring a three-panel layout: Layer Panel | Map Canvas | Property Panel.
-
-References
-----------
-- dev.notes/06_demo_layer_rotation.py: Rotation and status bar implementation
+This module provides the main application window with Sidebar Navigation UI,
+featuring a flexible layout: Sidebar | Tool Bar (Top) | Content Panels.
 """
 
 import sys
@@ -21,53 +17,36 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStatusBar,
     QLabel,
+    QStackedWidget,
 )
 from PySide6.QtCore import Qt, Signal
 from loguru import logger
+from qfluentwidgets import NavigationInterface, NavigationItemPosition, FluentIcon
 
-from src.gui.components.ribbon_bar import RibbonBar
+from src.gui.pages.subplot_page import SubplotPage
+from src.gui.pages.seedling_page import SeedlingPage
+from src.gui.pages.rename_page import RenamePage
+from src.gui.pages.timeseries_page import TimeSeriesPage
+from src.gui.pages.annotate_page import AnnotatePage
+
 from src.gui.components.map_canvas import MapCanvas
 from src.gui.components.layer_panel import LayerPanel
 from src.gui.components.property_panel import PropertyPanel
+from src.gui.i18n import tr, set_language
 
 
 class MainWindow(QMainWindow):
     """
-    Main application window with Ribbon-style UI.
+    Main application window with Sidebar Navigation UI.
 
     The window consists of:
-    - RibbonBar (top): Office-style tabbed toolbar
-    - LayerPanel (left 1/6): Layer management
-    - MapCanvas (center 2/3): GeoTiff viewer
-    - PropertyPanel (right 1/6): Parameter panel
-    - StatusBar (bottom): Coordinates, zoom, rotation
-
-    Attributes
-    ----------
-    ribbon_bar : RibbonBar
-        The Ribbon-style toolbar at the top.
-    layer_panel : LayerPanel
-        The layer management panel on the left.
-    map_canvas : MapCanvas
-        The main GeoTiff viewer in the center.
-    property_panel : PropertyPanel
-        The property/parameter panel on the right.
-
-    Signals
-    -------
-    sigCoordinateChanged : Signal(float, float)
-        Emitted when cursor position changes on map.
-    sigZoomChanged : Signal(float)
-        Emitted when zoom level changes.
-    sigRotationChanged : Signal(float)
-        Emitted when rotation angle changes.
-
-    Examples
-    --------
-    >>> app = QApplication(sys.argv)
-    >>> window = MainWindow()
-    >>> window.show()
-    >>> sys.exit(app.exec())
+    - NavigationInterface (left): Sidebar navigation
+    - ToolStack (top right): Context-specific tool controls (formerly Ribbon)
+    - Content Area (center right):
+        - LayerPanel (left)
+        - MapCanvas (center)
+        - PropertyPanel (right)
+    - StatusBar (bottom)
     """
 
     sigCoordinateChanged = Signal(float, float)
@@ -75,24 +54,19 @@ class MainWindow(QMainWindow):
     sigRotationChanged = Signal(float)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
-        """
-        Initialize the main window.
-
-        Parameters
-        ----------
-        parent : QWidget, optional
-            Parent widget, by default None.
-        """
         super().__init__(parent)
 
-        self.setWindowTitle("EasyPlantFieldID - GIS Preprocessing Tool")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle(tr("app.title"))
+        self.setGeometry(100, 100, 1500, 900)
 
         # Initialize UI components
         self._init_ui()
 
         # Connect signals
         self._connect_signals()
+
+        # Set initial style
+        self.navigation_interface.setExpandWidth(200)
 
         logger.info("MainWindow initialized successfully")
 
@@ -102,82 +76,150 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Main vertical layout
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        # Root layout (Horizontal: Nav | Content)
+        root_layout = QHBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # --- Ribbon Bar ---
-        self.ribbon_bar = RibbonBar()
-        main_layout.addWidget(self.ribbon_bar)
+        # --- Navigation Interface (Left Sidebar) ---
+        self.navigation_interface = NavigationInterface(self, showMenuButton=True, showReturnButton=False)
+        root_layout.addWidget(self.navigation_interface)
 
-        # --- Main Content Area (Splitter) ---
+        # --- Main Content Area (Right Side) ---
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        
+        root_layout.addWidget(content_widget, 1) # Stretch factor 1 to take remaining space
+
+        # 1. Tool Stack (Top Bar - formerly Ribbon Content)
+        self.tool_stack = QStackedWidget()
+        self.tool_stack.setStyleSheet("background-color: #f9f9f9; border-bottom: 1px solid #e0e0e0;")
+        
+        # Create and add pages
+        self.subplot_page = SubplotPage()
+        self.seedling_page = SeedlingPage()
+        self.rename_page = RenamePage()
+        self.timeseries_page = TimeSeriesPage()
+        self.annotate_page = AnnotatePage()
+
+        self.tool_stack.addWidget(self.subplot_page)
+        self.tool_stack.addWidget(self.seedling_page)
+        self.tool_stack.addWidget(self.rename_page)
+        self.tool_stack.addWidget(self.timeseries_page)
+        self.tool_stack.addWidget(self.annotate_page)
+
+        # Add navigation items
+        self._init_navigation()
+
+        content_layout.addWidget(self.tool_stack)
+
+        # 2. Panels Splitter (Center)
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.setHandleWidth(1)
 
-        # Left panel: Layer Panel (1/6 width)
+        # Left panel: Layer Panel
         self.layer_panel = LayerPanel()
         self.main_splitter.addWidget(self.layer_panel)
 
-        # Center panel: Map Canvas (2/3 width)
+        # Center panel: Map Canvas
         self.map_canvas = MapCanvas()
         self.main_splitter.addWidget(self.map_canvas)
 
-        # Right panel: Property Panel (1/6 width)
+        # Right panel: Property Panel
         self.property_panel = PropertyPanel()
         self.main_splitter.addWidget(self.property_panel)
 
         # Set initial sizes (1:4:1 ratio)
-        self.main_splitter.setSizes([200, 800, 200])
+        self.main_splitter.setSizes([200, 1000, 250])
 
-        main_layout.addWidget(self.main_splitter)
+        content_layout.addWidget(self.main_splitter, 1) # Stretch factor 1 to take remaining vertical space
 
         # --- Status Bar ---
         self._init_status_bar()
 
+    def _init_navigation(self):
+        """Initialize navigation items."""
+        # Top-aligned items
+        self.navigation_interface.addItem(
+            routeKey="subplot",
+            icon=FluentIcon.TILES,
+            text=tr("nav.subplot"),
+            onClick=lambda: self._switch_page(0)
+        )
+        self.navigation_interface.addItem(
+            routeKey="seedling",
+            icon=FluentIcon.LEAF,
+            text=tr("nav.seedling"),
+            onClick=lambda: self._switch_page(1)
+        )
+        self.navigation_interface.addItem(
+            routeKey="rename",
+            icon=FluentIcon.EDIT,
+            text=tr("nav.rename"),
+            onClick=lambda: self._switch_page(2)
+        )
+        self.navigation_interface.addItem(
+            routeKey="timeseries",
+            icon=FluentIcon.HISTORY,
+            text=tr("nav.timeseries"),
+            onClick=lambda: self._switch_page(3)
+        )
+        self.navigation_interface.addItem(
+            routeKey="annotate",
+            icon=FluentIcon.PENCIL_INK,
+            text=tr("nav.annotate"),
+            onClick=lambda: self._switch_page(4)
+        )
+
+        # Set initial selection
+        self.navigation_interface.setCurrentItem("subplot")
+
+    def _switch_page(self, index: int):
+        """Switch tool stack and property panel."""
+        self.tool_stack.setCurrentIndex(index)
+        self.property_panel.set_current_tab(index)
+
     def _init_status_bar(self) -> None:
-        """Initialize the status bar with coordinate, zoom, and rotation display."""
+        """Initialize the status bar."""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
         # Coordinate label
-        self.coord_label = QLabel("坐标: X: 0.00, Y: 0.00")
+        self.coord_label = QLabel(tr("status.coord").format(x=0.0, y=0.0))
         self.coord_label.setMinimumWidth(200)
         self.status_bar.addWidget(self.coord_label)
 
-        # Separator
         self.status_bar.addWidget(QLabel("|"))
 
         # Zoom label
-        self.zoom_label = QLabel("缩放: 100%")
+        self.zoom_label = QLabel(tr("status.zoom").format(zoom=100))
         self.zoom_label.setMinimumWidth(100)
         self.status_bar.addWidget(self.zoom_label)
 
-        # Separator
         self.status_bar.addWidget(QLabel("|"))
 
         # Rotation label
-        self.rotation_label = QLabel("旋转角度: 0.00°")
+        self.rotation_label = QLabel(tr("status.rotation").format(angle=0.0))
         self.rotation_label.setMinimumWidth(120)
         self.status_bar.addWidget(self.rotation_label)
 
-        # Stretch to push progress bar to the right
+        # Stretch
         self.status_bar.addWidget(QLabel(""), 1)
 
-        # Status message (right side)
-        self.status_message = QLabel("就绪")
+        # Status message
+        self.status_message = QLabel(tr("status.ready"))
         self.status_bar.addPermanentWidget(self.status_message)
 
     def _connect_signals(self) -> None:
         """Connect internal signals between components."""
-        # Connect map canvas signals to status bar updates
+        # Map canvas signals
         self.map_canvas.sigCoordinateChanged.connect(self._update_coordinates)
         self.map_canvas.sigZoomChanged.connect(self._update_zoom)
         self.map_canvas.sigRotationChanged.connect(self._update_rotation)
 
-        # Connect ribbon bar tab changes
-        self.ribbon_bar.sigTabChanged.connect(self._on_tab_changed)
-
-        # Connect layer panel signals to map canvas
+        # Layer panel signals
         self.layer_panel.sigLayerVisibilityChanged.connect(
             self.map_canvas.set_layer_visibility
         )
@@ -185,79 +227,32 @@ class MainWindow(QMainWindow):
             self.map_canvas.update_layer_order
         )
 
-    def _update_coordinates(self, x: float, y: float) -> None:
-        """
-        Update coordinate display in status bar.
+        # Connect new Page signals (examples from original code)
+        # SubplotPage
+        self.subplot_page.sigGenerate.connect(lambda: logger.info("Generate Subplot triggered"))
+        
+        # SeedlingPage
+        self.seedling_page.sigDetect.connect(lambda: logger.info("Detect Seedling triggered"))
 
-        Parameters
-        ----------
-        x : float
-            X coordinate (longitude or easting).
-        y : float
-            Y coordinate (latitude or northing).
-        """
-        self.coord_label.setText(f"坐标: X: {x:.2f}, Y: {y:.2f}")
+        # TODO: Connect other signals as implementation progresses
+
+    def _update_coordinates(self, x: float, y: float) -> None:
+        self.coord_label.setText(tr("status.coord").format(x=x, y=y))
         self.sigCoordinateChanged.emit(x, y)
 
     def _update_zoom(self, zoom_level: float) -> None:
-        """
-        Update zoom level display in status bar.
-
-        Parameters
-        ----------
-        zoom_level : float
-            Current zoom level as percentage.
-        """
-        self.zoom_label.setText(f"缩放: {zoom_level:.0f}%")
+        self.zoom_label.setText(tr("status.zoom").format(zoom=zoom_level))
         self.sigZoomChanged.emit(zoom_level)
 
     def _update_rotation(self, angle: float) -> None:
-        """
-        Update rotation angle display in status bar.
-
-        Parameters
-        ----------
-        angle : float
-            Current rotation angle in degrees.
-        """
-        self.rotation_label.setText(f"旋转角度: {angle:.2f}°")
+        self.rotation_label.setText(tr("status.rotation").format(angle=angle))
         self.sigRotationChanged.emit(angle)
 
-    def _on_tab_changed(self, tab_index: int) -> None:
-        """
-        Handle ribbon bar tab change.
-
-        Parameters
-        ----------
-        tab_index : int
-            Index of the newly selected tab.
-        """
-        logger.debug(f"Tab changed to index: {tab_index}")
-        # Update property panel based on current tab
-        self.property_panel.set_current_tab(tab_index)
-
     def set_status_message(self, message: str) -> None:
-        """
-        Set the status bar message.
-
-        Parameters
-        ----------
-        message : str
-            Message to display in the status bar.
-        """
         self.status_message.setText(message)
 
     def closeEvent(self, event) -> None:
-        """
-        Handle window close event.
-
-        Parameters
-        ----------
-        event : QCloseEvent
-            The close event.
-        """
         logger.info("MainWindow closing")
-        # Clean up resources
         self.map_canvas.cleanup()
         super().closeEvent(event)
 
@@ -266,13 +261,15 @@ def main() -> None:
     """Main entry point for the application."""
     import pyqtgraph as pg
 
-    # Configure PyQtGraph
     pg.setConfigOptions(imageAxisOrder='row-major')
 
     app = QApplication(sys.argv)
     app.setApplicationName("EasyPlantFieldID")
     app.setApplicationVersion("0.1.0")
-
+    
+    # Initialize translator (default is English)
+    # TODO: Load language from config
+    
     window = MainWindow()
     window.show()
 
