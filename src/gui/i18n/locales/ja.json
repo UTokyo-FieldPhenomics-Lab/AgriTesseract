@@ -5,6 +5,7 @@
     "nav.rename": "苗ID変更",
     "nav.timeseries": "時系列クロップ",
     "nav.annotate": "アノテーション・学習",
+    "nav.settings": "設定",
     
     "layer_panel.title": "レイヤー",
     "layer_panel.add_tooltip": "レイヤー追加",
@@ -92,6 +93,13 @@
     "page.anno.group.train": "学習",
     "page.anno.btn.train": "YOLO学習",
     "page.anno.btn.switch": "モデル切替",
+
+    "settings.group.model": "モデル設定",
+    "settings.label.model_dir": "モデル重みフォルダ",
+    "settings.btn.browse": "参照...",
+    "settings.group.general": "一般",
+    "settings.label.language": "言語",
+    "settings.msg.restart": "一部の変更は再起動後に有効になります。",
 
     "prop.group.numbering": "番号付与規則",
 

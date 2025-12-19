@@ -28,6 +28,7 @@ from src.gui.pages.seedling_page import SeedlingPage
 from src.gui.pages.rename_page import RenamePage
 from src.gui.pages.timeseries_page import TimeSeriesPage
 from src.gui.pages.annotate_page import AnnotatePage
+from src.gui.pages.settings_page import SettingsPage
 
 from src.gui.components.map_canvas import MapCanvas
 from src.gui.components.layer_panel import LayerPanel
@@ -103,12 +104,14 @@ class MainWindow(QMainWindow):
         self.rename_page = RenamePage()
         self.timeseries_page = TimeSeriesPage()
         self.annotate_page = AnnotatePage()
+        self.settings_page = SettingsPage(None)
 
         self.tool_stack.addWidget(self.subplot_page)
         self.tool_stack.addWidget(self.seedling_page)
         self.tool_stack.addWidget(self.rename_page)
         self.tool_stack.addWidget(self.timeseries_page)
         self.tool_stack.addWidget(self.annotate_page)
+        self.tool_stack.addWidget(self.settings_page)
 
         # Add navigation items
         self._init_navigation()
@@ -171,6 +174,15 @@ class MainWindow(QMainWindow):
             icon=FluentIcon.PENCIL_INK,
             text=tr("nav.annotate"),
             onClick=lambda: self._switch_page(4)
+        )
+
+        # Bottom items
+        self.navigation_interface.addItem(
+            routeKey="settings",
+            icon=FluentIcon.SETTING,
+            text=tr("nav.settings"),
+            onClick=lambda: self._switch_page(5),
+            position=NavigationItemPosition.BOTTOM
         )
 
         # Set initial selection
@@ -255,26 +267,3 @@ class MainWindow(QMainWindow):
         logger.info("MainWindow closing")
         self.map_canvas.cleanup()
         super().closeEvent(event)
-
-
-def main() -> None:
-    """Main entry point for the application."""
-    import pyqtgraph as pg
-
-    pg.setConfigOptions(imageAxisOrder='row-major')
-
-    app = QApplication(sys.argv)
-    app.setApplicationName("EasyPlantFieldID")
-    app.setApplicationVersion("0.1.0")
-    
-    # Initialize translator (default is English)
-    # TODO: Load language from config
-    
-    window = MainWindow()
-    window.show()
-
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()

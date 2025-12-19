@@ -69,6 +69,13 @@ def main() -> int:
 
     # Import and create main window
     from src.gui.main_window import MainWindow
+    from PySide6.QtCore import QSettings
+    from src.gui.i18n import set_language
+
+    # Load language from config
+    settings = QSettings("UTokyo-FieldPhenomics-Lab", "EasyPlantFieldID")
+    lang = settings.value("language", "en")
+    set_language(str(lang))
 
     window = MainWindow()
     window.show()

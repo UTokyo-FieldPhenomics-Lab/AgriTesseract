@@ -25,6 +25,10 @@ def verify():
         if not hasattr(window, 'tool_stack'):
             print("ERROR: tool_stack missing")
             return False
+
+        if not hasattr(window, 'settings_page'):
+            print("ERROR: settings_page missing")
+            return False
             
         print("MainWindow components verified.")
         return True

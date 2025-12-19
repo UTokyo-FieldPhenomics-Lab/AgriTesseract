@@ -5,6 +5,7 @@
     "nav.rename": "ID Renaming",
     "nav.timeseries": "Time Series Crop",
     "nav.annotate": "Annotation & Train",
+    "nav.settings": "Settings",
     
     "layer_panel.title": "Layers",
     "layer_panel.add_tooltip": "Add Layer",
@@ -92,6 +93,13 @@
     "page.anno.group.train": "Training",
     "page.anno.btn.train": "Train YOLO",
     "page.anno.btn.switch": "Switch Model",
+
+    "settings.group.model": "Model Configuration",
+    "settings.label.model_dir": "Model Weights Folder",
+    "settings.btn.browse": "Browse...",
+    "settings.group.general": "General",
+    "settings.label.language": "Language",
+    "settings.msg.restart": "Restart required for some changes to take effect.",
 
     "prop.group.numbering": "Numbering Rules",
 
