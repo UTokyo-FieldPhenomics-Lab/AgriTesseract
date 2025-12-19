@@ -1,0 +1,72 @@
+[project]
+name = "sam3"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "loguru>=0.7.3",
+    "supervision>=0.27.0",
+    "torch==2.7.0",
+    "torchaudio>=2.7.0",
+    "torchvision>=0.22.0",
+    "numpy>=2",
+    "sahi>=0.11.36",
+]
+
+[dependency-groups]
+sam3 = [
+    "timm>=1.0.17",
+    # "numpy==1.26",
+    "tqdm",
+    "ftfy==6.1.1",
+    "regex",
+    "iopath>=0.1.10",
+    "typing_extensions",
+    "huggingface_hub",
+]
+psp = [
+    "segmentation-refinement>=0.6",
+]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black==24.2.0",
+    "ufmt==2.8.0",
+    "ruff-api==0.1.0",
+    "usort==1.0.2",
+    "gitpython==3.1.31",
+    "yt-dlp",
+    "pandas",
+    "opencv-python",
+    "pycocotools",
+    "numba",
+    "python-rapidjson",
+]
+notebooks = [
+    "matplotlib",
+    "jupyter",
+    "notebook",
+    "ipywidgets",
+    "ipycanvas",
+    "ipykernel>=7.1.0",
+    "ipympl",
+    "pycocotools",
+    "decord",
+    "opencv-python",
+    "einops",
+    "scikit-image",
+    "scikit-learn",
+]
+train = [
+    "hydra-core",
+    "submitit",
+    "tensorboard",
+    "zstandard",
+    "scipy",
+    "torchmetrics",
+    "fvcore",
+    "fairscale",
+    "scikit-image",
+    "scikit-learn",
+]
