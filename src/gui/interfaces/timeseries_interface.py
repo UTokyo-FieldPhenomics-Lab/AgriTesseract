@@ -4,22 +4,24 @@ Time Series Crop Page.
 
 from typing import Optional
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QPushButton,
-    QComboBox,
-    QLabel,
-    QLineEdit,
-    QDoubleSpinBox,
+from typing import Optional
+from PySide6.QtWidgets import QWidget, QLabel
+from qfluentwidgets import (
+    PushButton,
+    PrimaryPushButton,
+    ComboBox,
+    LineEdit,
+    DoubleSpinBox,
 )
 
-from src.gui.pages.base_page import BasePage, PageGroup
+from src.gui.interfaces.map_interface import MapInterface
+from src.gui.interfaces.base_interface import PageGroup
 from src.gui.i18n import tr
 
 
-class TimeSeriesPage(BasePage):
+class TimeSeriesInterface(MapInterface):
     """
-    Page content for Time Series Cropping.
+    Interface content for Time Series Cropping.
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -31,10 +33,10 @@ class TimeSeriesPage(BasePage):
         # --- File Group ---
         file_group = PageGroup(tr("page.common.file"))
 
-        self.btn_load_points = QPushButton(tr("page.ts.btn.load_points"))
+        self.btn_load_points = PushButton(tr("page.ts.btn.load_points"))
         file_group.add_widget(self.btn_load_points)
 
-        self.btn_add_date = QPushButton(tr("page.ts.btn.add_date"))
+        self.btn_add_date = PushButton(tr("page.ts.btn.add_date"))
         file_group.add_widget(self.btn_add_date)
 
         self.add_group(file_group)
@@ -43,12 +45,12 @@ class TimeSeriesPage(BasePage):
         param_group = PageGroup(tr("page.ts.group.param"))
 
         param_group.add_widget(QLabel(tr("page.ts.label.type")))
-        self.combo_size_type = QComboBox()
+        self.combo_size_type = ComboBox()
         self.combo_size_type.addItems([tr("page.ts.combo.real"), tr("page.ts.combo.pixel")])
         param_group.add_widget(self.combo_size_type)
 
         param_group.add_widget(QLabel(tr("page.ts.label.side")))
-        self.spin_crop_size = QDoubleSpinBox()
+        self.spin_crop_size = DoubleSpinBox()
         self.spin_crop_size.setRange(0.1, 100)
         self.spin_crop_size.setValue(1.0)
         param_group.add_widget(self.spin_crop_size)
@@ -59,17 +61,14 @@ class TimeSeriesPage(BasePage):
         output_group = PageGroup(tr("page.ts.group.output"))
 
         output_group.add_widget(QLabel(tr("page.ts.label.dir")))
-        self.edit_output_dir = QLineEdit()
+        self.edit_output_dir = LineEdit()
         self.edit_output_dir.setMinimumWidth(150)
         output_group.add_widget(self.edit_output_dir)
 
-        self.btn_browse = QPushButton(tr("page.ts.btn.browse"))
+        self.btn_browse = PushButton(tr("page.ts.btn.browse"))
         output_group.add_widget(self.btn_browse)
 
-        self.btn_start_crop = QPushButton(tr("page.ts.btn.start"))
-        self.btn_start_crop.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }"
-        )
+        self.btn_start_crop = PrimaryPushButton(tr("page.ts.btn.start"))
         output_group.add_widget(self.btn_start_crop)
 
         self.add_group(output_group)

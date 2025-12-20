@@ -18,16 +18,12 @@ def verify():
         print("MainWindow instantiated successfully.")
         
         # Check if key components exist
-        if not hasattr(window, 'navigation_interface'):
-            print("ERROR: navigation_interface missing")
-            return False
-            
-        if not hasattr(window, 'tool_stack'):
-            print("ERROR: tool_stack missing")
+        if not hasattr(window, 'subplot_interface'):
+            print("ERROR: subplot_interface missing")
             return False
 
-        if not hasattr(window, 'settings_page'):
-            print("ERROR: settings_page missing")
+        if not hasattr(window, 'settings_interface'):
+            print("ERROR: settings_interface missing")
             return False
             
         print("MainWindow components verified.")

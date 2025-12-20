@@ -4,21 +4,23 @@ ID Renaming Page.
 
 from typing import Optional
 
-from PySide6.QtWidgets import (
-    QWidget,
-    QPushButton,
-    QComboBox,
-    QLabel,
-    QSpinBox,
+from typing import Optional
+from PySide6.QtWidgets import QWidget, QLabel
+from qfluentwidgets import (
+    PushButton,
+    PrimaryPushButton,
+    ComboBox,
+    SpinBox,
 )
 
-from src.gui.pages.base_page import BasePage, PageGroup
+from src.gui.interfaces.map_interface import MapInterface
+from src.gui.interfaces.base_interface import PageGroup
 from src.gui.i18n import tr
 
 
-class RenamePage(BasePage):
+class RenameInterface(MapInterface):
     """
-    Page content for Seedling ID Renaming.
+    Interface content for Seedling ID Renaming.
     """
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -30,7 +32,7 @@ class RenamePage(BasePage):
         # --- File Group ---
         file_group = PageGroup(tr("page.common.file"))
 
-        self.btn_load_shp = QPushButton(tr("page.common.load_shp"))
+        self.btn_load_shp = PushButton(tr("page.common.load_shp"))
         file_group.add_widget(self.btn_load_shp)
 
         self.add_group(file_group)
@@ -39,7 +41,7 @@ class RenamePage(BasePage):
         ridge_group = PageGroup(tr("page.rename.group.ridge"))
 
         ridge_group.add_widget(QLabel(tr("page.rename.label.direction")))
-        self.combo_direction = QComboBox()
+        self.combo_direction = ComboBox()
         self.combo_direction.addItems([
             tr("page.rename.combo.auto"), 
             tr("page.rename.combo.x"), 
@@ -48,12 +50,12 @@ class RenamePage(BasePage):
         ridge_group.add_widget(self.combo_direction)
 
         ridge_group.add_widget(QLabel(tr("page.rename.label.strength")))
-        self.spin_strength = QSpinBox()
+        self.spin_strength = SpinBox()
         self.spin_strength.setRange(1, 50)
         self.spin_strength.setValue(10)
         ridge_group.add_widget(self.spin_strength)
 
-        self.btn_detect_ridge = QPushButton(tr("page.rename.btn.detect"))
+        self.btn_detect_ridge = PushButton(tr("page.rename.btn.detect"))
         ridge_group.add_widget(self.btn_detect_ridge)
 
         self.add_group(ridge_group)
@@ -62,7 +64,7 @@ class RenamePage(BasePage):
         num_group = PageGroup(tr("page.rename.group.num"))
 
         num_group.add_widget(QLabel(tr("page.rename.label.format")))
-        self.combo_format = QComboBox()
+        self.combo_format = ComboBox()
         self.combo_format.addItems([
             tr("page.rename.combo.rc_plant"),
             tr("page.rename.combo.numeric"),
@@ -70,7 +72,7 @@ class RenamePage(BasePage):
         ])
         num_group.add_widget(self.combo_format)
 
-        self.btn_apply_numbering = QPushButton(tr("page.rename.btn.apply"))
+        self.btn_apply_numbering = PushButton(tr("page.rename.btn.apply"))
         num_group.add_widget(self.btn_apply_numbering)
 
         self.add_group(num_group)
@@ -78,7 +80,7 @@ class RenamePage(BasePage):
         # --- Save Group ---
         save_group = PageGroup(tr("page.seedling.group.save"))
 
-        self.btn_save = QPushButton(tr("page.common.save"))
+        self.btn_save = PrimaryPushButton(tr("page.common.save"))
         save_group.add_widget(self.btn_save)
 
         self.add_group(save_group)
