@@ -27,7 +27,7 @@ pg.setConfigOptions(
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QWheelEvent, QPolygonF, QTransform
 from loguru import logger
 
 try:
@@ -618,19 +618,49 @@ class MapCanvas(QWidget):
         dataset = layer_info['dataset']
         image_item = layer_info['item']
 
-        geo_left = view_rect.left()
-        geo_right = view_rect.right()
-        geo_bottom = view_rect.top()  # Note: Qt Y is inverted
-        geo_top = view_rect.bottom()
+        # Calculate visible rect in ItemGroup coordinates (Geo coords, rotated)
+        view_rect = self._view_box.viewRect()
+        
+        # Use simple mapping if no rotation or manual transform if rotated
+        if self._rotation_angle == 0:
+            bbox = view_rect
+        else:
+            center = self._item_group.transformOriginPoint()
+            transform = QTransform()
+            transform.translate(center.x(), center.y())
+            transform.rotate(self._rotation_angle) # Inverse of -angle
+            transform.translate(-center.x(), -center.y())
+            bbox = transform.mapRect(view_rect)
+        
+        geo_left = bbox.left()
+        geo_right = bbox.right()
+        geo_bottom = bbox.top()
+        geo_top = bbox.bottom()
 
         try:
             # Convert geo coordinates to rasterio window
-            # rasterio.window(left, bottom, right, top)
-            window = dataset.window(geo_left, geo_bottom, geo_right, geo_top)
-            logger.debug(f"View Rect: {view_rect}, Window: {window}")
+            # Ensure proper ordering for rasterio (bottom < top) (Y-up logic)
+            
+            w_left, w_bottom, w_right, w_top = bbox.left(), bbox.top(), bbox.right(), bbox.bottom()
+            
+            # Use min/max to be safe regardless of axis direction assumptions
+            r_left = min(w_left, w_right)
+            r_right = max(w_left, w_right)
+            r_bottom = min(w_bottom, w_top)
+            r_top = max(w_bottom, w_top)
+            
+            # Pad the window slightly to avoid edge artifacts during rotation
+            # padding = max(r_right - r_left, r_top - r_bottom) * 0.05
+            # r_left -= padding
+            # r_right += padding
+            # r_bottom -= padding
+            # r_top += padding
+
+            window = dataset.window(r_left, r_bottom, r_right, r_top)
+            # logger.debug(f"View Rect: {view_rect}, Bbox: {bbox}, Window: {window}")
         except rasterio.errors.WindowError:
             # View is outside image bounds
-            logger.debug("View outside image bounds")
+            # logger.debug("View outside image bounds")
             image_item.clear()
             return
 
