@@ -13,8 +13,7 @@ from qfluentwidgets import (
     SpinBox,
 )
 
-from src.gui.interfaces.map_interface import MapInterface
-from src.gui.interfaces.base_interface import PageGroup
+from src.gui.interfaces.base_interface import MapInterface, PageGroup
 from src.gui.config import tr
 
 
