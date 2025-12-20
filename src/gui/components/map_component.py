@@ -72,6 +72,10 @@ class MapComponent(QWidget):
         self.map_canvas.sigCoordinateChanged.connect(self.status_bar.update_coordinates)
         self.map_canvas.sigZoomChanged.connect(self.status_bar.update_zoom)
         self.map_canvas.sigRotationChanged.connect(self.status_bar.update_rotation)
+        
+        # Status Bar -> Map Canvas (Control)
+        self.status_bar.sigZoomChanged.connect(self.map_canvas.set_zoom)
+        self.status_bar.sigRotationChanged.connect(self.map_canvas.set_rotation)
 
         # Map Canvas -> Self (re-emit)
         self.map_canvas.sigCoordinateChanged.connect(self.sigCoordinateChanged.emit)

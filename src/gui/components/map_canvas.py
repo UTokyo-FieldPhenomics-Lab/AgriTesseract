@@ -200,12 +200,20 @@ class MapCanvas(QWidget):
         # Create custom ViewBox
         self._view_box = CustomViewBox()
         self._view_box.sigClicked.connect(self._on_canvas_clicked)
-        self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover)
+        # self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover) # Using SignalProxy instead
 
         # Create PlotWidget with custom ViewBox
         self._plot_widget = pg.PlotWidget(viewBox=self._view_box)
         self._plot_widget.setBackground('w')
         self._plot_widget.setAspectLocked(True)
+
+        # Enable mouse tracking for coordinate display
+        self._plot_widget.setMouseTracking(True)
+        self._proxy = pg.SignalProxy(
+            self._plot_widget.scene().sigMouseMoved, 
+            rateLimit=60, 
+            slot=self._on_mouse_moved
+        )
 
         # Hide axes for map-like view
         plot_item = self._plot_widget.getPlotItem()
@@ -521,6 +529,9 @@ class MapCanvas(QWidget):
         self._item_group.setRotation(-angle)
         self.sigRotationChanged.emit(angle)
         logger.debug(f"Rotation set to: {angle}° around {center}")
+        
+        # Trigger update of visible tiles
+        self._update_timer.start()
 
     def get_rotation(self) -> float:
         """Get the current rotation angle."""
@@ -726,9 +737,12 @@ class MapCanvas(QWidget):
         except Exception as e:
             logger.error(f"Error loading visible region: {e}")
 
-    def _on_coordinate_hover(self, x: float, y: float) -> None:
-        """Handle coordinate hover updates."""
-        self.sigCoordinateChanged.emit(x, y)
+    def _on_mouse_moved(self, evt) -> None:
+        """Handle mouse move events for coordinate tracking."""
+        pos = evt[0]
+        if self._plot_widget.sceneBoundingRect().contains(pos):
+            mouse_point = self._view_box.mapSceneToView(pos)
+            self.sigCoordinateChanged.emit(mouse_point.x(), mouse_point.y())
 
     def _on_canvas_clicked(self, ev) -> None:
         """Handle canvas click events."""
@@ -759,9 +773,58 @@ class MapCanvas(QWidget):
         if layer_name not in self._layers:
             return
 
-        bounds = self._layers[layer_name].get('bounds')
+        bounds = self._layers[layer_name]['bounds']
         if bounds:
             width = bounds.right - bounds.left
             height = bounds.top - bounds.bottom
             rect = QRectF(bounds.left, bounds.bottom, width, height)
             self._view_box.setRange(rect)
+
+    def set_zoom(self, zoom_percent: float) -> None:
+        """
+        Set zoom level (percentage relative to full extent).
+
+        Parameters
+        ----------
+        zoom_percent : float
+            Zoom level in percent (e.g., 100).
+        """
+        if not self._layers or zoom_percent <= 0:
+            return
+
+        # Determine base extent (first layer or boundary)
+        # TODO: Ideally should cache this base extent
+        first_layer = next(iter(self._layers.values()))
+        if 'bounds' not in first_layer:
+            return
+            
+        b = first_layer['bounds']
+        base_width = b.right - b.left
+        
+        # Calculate new width
+        # zoom = base / distinct_width * 100
+        # distinct_width = base / (zoom / 100)
+        
+        target_width = base_width / (zoom_percent / 100.0)
+        
+        # Get current center to zoom around center
+        current_rect = self._view_box.viewRect()
+        center = current_rect.center()
+        
+        # We need to maintain aspect ratio, so height is derived
+        # ViewBox.setRange with padding=0 handles aspect if AspectLocked is True?
+        # If aspect locked, we just set range rect with desired width and arbitrary height?
+        # Or calculate height based on current aspect.
+        
+        current_aspect = current_rect.height() / current_rect.width() if current_rect.width() > 0 else 1.0
+        target_height = target_width * current_aspect
+        
+        new_rect = QRectF(
+            center.x() - target_width / 2,
+            center.y() - target_height / 2,
+            target_width,
+            target_height
+        )
+        
+        self._view_box.setRange(new_rect, padding=0)
+
