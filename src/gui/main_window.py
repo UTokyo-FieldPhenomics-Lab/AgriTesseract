@@ -9,16 +9,19 @@ from qfluentwidgets import (
     FluentWindow, 
     NavigationItemPosition, 
     FluentIcon as FIF,
-    SplashScreen
+    SplashScreen,
+    setTheme,
+    Theme
 )
 
+from src.gui.config import cfg
 from src.gui.interfaces.subplot_interface import SubplotInterface
 from src.gui.interfaces.seedling_interface import SeedlingInterface
 from src.gui.interfaces.rename_interface import RenameInterface
 from src.gui.interfaces.timeseries_interface import TimeSeriesInterface
 from src.gui.interfaces.annotate_interface import AnnotateInterface
 from src.gui.interfaces.settings_interface import SettingsInterface
-from src.gui.i18n import tr, Translator
+from src.gui.config import tr, translator
 
 class MainWindow(FluentWindow):
     """
@@ -32,7 +35,10 @@ class MainWindow(FluentWindow):
         self.resize(1200, 800)
         
         # Initialize Translator
-        self.translator = Translator()
+        self.translator = translator
+
+        # Apply Theme
+        setTheme(cfg.get(cfg.themeMode))
 
         # Create interfaces
         self.subplot_interface = SubplotInterface(self)

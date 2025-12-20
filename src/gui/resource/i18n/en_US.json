@@ -1,5 +1,6 @@
+
 {
-    "app.title": "EasyPlantFieldID - GIS Preprocessing Tool",
+    "app.title": "EasyPlantFieldID",
     "nav.subplot": "Subplot Generation",
     "nav.seedling": "Seedling Detection",
     "nav.rename": "ID Renaming",
@@ -94,12 +95,24 @@
     "page.anno.btn.train": "Train YOLO",
     "page.anno.btn.switch": "Switch Model",
 
-    "settings.group.model": "Model Configuration",
-    "settings.label.model_dir": "Model Weights Folder",
-    "settings.btn.browse": "Browse...",
     "settings.group.general": "General",
+    "settings.group.model": "Model",
+    "settings.label.theme": "Theme Mode",
+    "settings.desc.theme": "Application appearance",
+    "settings.theme.auto": "Use System Setting",
+    "settings.theme.light": "Light",
+    "settings.theme.dark": "Dark",
     "settings.label.language": "Language",
-    "settings.msg.restart": "Restart required for some changes to take effect.",
+    "settings.desc.language": "User Interface Language",
+    "settings.lang.auto": "Use System Setting",
+    "settings.lang.en": "English",
+    "settings.lang.zh": "Chinese",
+    "settings.lang.ja": "Japanese",
+    "settings.label.model_dir": "Model Directory",
+    "settings.btn.browse": "Browse",
+    "settings.placeholder.no_dir": "No directory selected",
+    "settings.msg.restart_title": "Restart Required",
+    "settings.msg.restart": "Please restart the application to apply changes",
 
     "prop.group.numbering": "Numbering Rules",
 
@@ -158,5 +171,5 @@
     "prop.label.model_status": "Model Status",
     
     "prop.title": "Properties"
-}
 
+}

@@ -1,71 +1,82 @@
 
 from pathlib import Path
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFileDialog
-from PySide6.QtCore import Qt, QSettings, Signal
-from loguru import logger
+from PySide6.QtWidgets import QWidget, QLabel, QFileDialog
+from PySide6.QtCore import Qt
 from qfluentwidgets import (
     ScrollArea, 
     SettingCardGroup, 
     PushSettingCard, 
-    ComboBoxSettingCard,
+    OptionsSettingCard,
     ExpandLayout,
     InfoBar,
     InfoBarPosition,
-    SettingCard,
-    ComboBox
+    Theme,
+    setTheme,
+    setThemeColor
 )
 from qfluentwidgets import FluentIcon as FIF
 
-from src.gui.i18n import tr, Translator
-
-class LanguageSettingCard(SettingCard):
-    """ Language setting card with ComboBox """
-    def __init__(self, icon, title, content, texts, parent=None):
-        super().__init__(icon, title, content, parent)
-        self.comboBox = ComboBox(self)
-        self.comboBox.addItems(texts)
-        self.hBoxLayout.addWidget(self.comboBox, 0, Qt.AlignmentFlag.AlignRight)
-        self.hBoxLayout.addSpacing(16)
+from src.gui.config import cfg, Language, tr, translator
 
 class SettingsInterface(ScrollArea):
     """
     Settings Interface.
     """
-    def __init__(self, translator: Translator, parent=None):
+    def __init__(self, translator: translator, parent=None):
         super().__init__(parent)
         self.translator = translator
-        self.settings = QSettings("UTokyo-FieldPhenomics-Lab", "EasyPlantFieldID")
         
         self.scrollWidget = QWidget()
         self.expandLayout = ExpandLayout(self.scrollWidget)
         
         self.setWidget(self.scrollWidget)
         self.setWidgetResizable(True)
+        self.setObjectName('settingsInterface')
         
         self._init_ui()
         self._load_settings()
+        self._connect_signals()
 
     def _init_ui(self):
         """Initialize UI controls."""
         
         # --- Settings Header ---
         self.settingLabel = QLabel(tr("nav.settings"), self)
-        self.settingLabel.setStyleSheet("font-size: 24px; font-weight: bold;")
+        self.settingLabel.setObjectName('settingLabel')
         
         # --- General Group ---
         self.generalGroup = SettingCardGroup(tr("settings.group.general"), self.scrollWidget)
         
+        # Theme Selection
+        self.themeCard = OptionsSettingCard(
+            cfg.themeMode,
+            FIF.BRUSH,
+            tr("settings.label.theme"),
+            tr("settings.desc.theme"),
+            texts=[
+                tr("settings.theme.auto"),
+                tr("settings.theme.light"),
+                tr("settings.theme.dark")
+            ],
+            parent=self.generalGroup
+        )
+        
         # Language Selection
-        self.languageCard = LanguageSettingCard(
+        self.languageCard = OptionsSettingCard(
+            cfg.language,
             FIF.LANGUAGE,
             tr("settings.label.language"),
             tr("settings.desc.language"),
-            texts=["English", "中文", "日本語"],
+            texts=[
+                tr("settings.lang.auto"),
+                tr("settings.lang.en"),
+                tr("settings.lang.zh"),
+                tr("settings.lang.ja")
+            ],
             parent=self.generalGroup
         )
-        self.languageCard.comboBox.setCurrentIndex(0)
-        self.languageCard.comboBox.currentTextChanged.connect(self._on_language_changed)
         
+        self.generalGroup.addSettingCard(self.themeCard)
         self.generalGroup.addSettingCard(self.languageCard)
         
         # --- Model Configuration Group ---
@@ -75,10 +86,9 @@ class SettingsInterface(ScrollArea):
             tr("settings.btn.browse"),
             FIF.FOLDER,
             tr("settings.label.model_dir"),
-            "...", # Placeholder for content
+            cfg.modelDir.value,
             self.modelGroup
         )
-        self.modelDirCard.clicked.connect(self._browse_model_dir)
         
         self.modelGroup.addSettingCard(self.modelDirCard)
 
@@ -90,59 +100,57 @@ class SettingsInterface(ScrollArea):
         self.expandLayout.addWidget(self.modelGroup)
 
     def _load_settings(self):
-        """Load settings from QSettings."""
-        # Load Language
-        current_lang = self.settings.value("language", "en")
-        
-        # Map code to text index
-        lang_map = {
-            "en": 0, # English
-            "zh": 1, # Chinese
-            "ja": 2  # Japanese
-        }
-        index = lang_map.get(current_lang, 0)
-        self.languageCard.comboBox.setCurrentIndex(index)
-        
-        # Load Model Dir
-        model_dir = self.settings.value("model_dir", "")
-        if model_dir:
-            self.modelDirCard.setContent(str(model_dir))
-        else:
+        """Load settings (handled by QConfig binding automatically for some widgets, but some manual sync needed)."""
+        # Set initial content for model dir
+        if not cfg.modelDir.value:
             self.modelDirCard.setContent(tr("settings.placeholder.no_dir"))
+        else:
+            self.modelDirCard.setContent(cfg.modelDir.value)
+
+    def _connect_signals(self):
+        """Connect signals."""
+        self.modelDirCard.clicked.connect(self._browse_model_dir)
+        cfg.themeChanged.connect(self.setQss)
+        cfg.language.valueChanged.connect(self.setLanguage)
 
     def _browse_model_dir(self):
         """Open file dialog to select model directory."""
         directory = QFileDialog.getExistingDirectory(
             self, 
             tr("settings.btn.browse"),
-            self.modelDirCard.contentLabel.text()
+            self.modelDirCard.contentLabel.text() if self.modelDirCard.contentLabel.text() != "..." else ""
         )
         if directory:
             self.modelDirCard.setContent(directory)
-            self.settings.setValue("model_dir", directory)
-            logger.info(f"Model directory saved: {directory}")
+            cfg.modelDir.setValue(directory)
 
-    def _on_language_changed(self, text: str):
-        """Handle language change."""
-        lang_map = {
-            "English": "en",
-            "中文": "zh",
-            "日本語": "ja"
-        }
-        lang_code = lang_map.get(text, "en")
-        
-        # Only update if changed
-        current_saved = self.settings.value("language", "en")
-        if lang_code != current_saved:
-            self.settings.setValue("language", lang_code)
-            logger.info(f"Language setting changed to {lang_code}. Restart required.")
+    def _on_restart_needed(self):
+        """Show restart warning."""
+        InfoBar.warning(
+            title=tr("settings.msg.restart_title"),
+            content=tr("settings.msg.restart"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=5000,
+            parent=self
+        )
+
+    def setQss(self):
+        """Apply QSS."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            import darkdetect
+            theme_name = "dark" if darkdetect.isDark() else "light"
+        else:
+            theme_name = theme.value.lower()
             
-            InfoBar.warning(
-                title=tr("settings.msg.restart_title"),
-                content=tr("settings.msg.restart"),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP_RIGHT, # Need to import InfoBarPosition
-                duration=5000,
-                parent=self
-            )
+        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "setting_interface.qss"
+        if qss_path.exists():
+            with open(qss_path, encoding='utf-8') as f:
+                self.setStyleSheet(f.read())
+
+    def setLanguage(self, language: Language):
+        """Set language."""
+        self.translator.set_language(language)
+        self._on_restart_needed()

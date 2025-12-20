@@ -31,7 +31,7 @@ from PySide6.QtCore import Qt, Signal, QPoint
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QDragMoveEvent
 from loguru import logger
 
-from src.gui.i18n import tr
+from src.gui.config import tr
 
 
 class DraggableTreeWidget(QTreeWidget):

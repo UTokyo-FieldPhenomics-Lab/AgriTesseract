@@ -1,5 +1,6 @@
+
 {
-    "app.title": "EasyPlantFieldID - GIS 前処理ツール",
+    "app.title": "EasyPlantFieldID",
     "nav.subplot": "サブプロット生成",
     "nav.seedling": "苗位置検出",
     "nav.rename": "苗ID変更",
@@ -94,12 +95,24 @@
     "page.anno.btn.train": "YOLO学習",
     "page.anno.btn.switch": "モデル切替",
 
-    "settings.group.model": "モデル設定",
-    "settings.label.model_dir": "モデル重みフォルダ",
-    "settings.btn.browse": "参照...",
     "settings.group.general": "一般",
+    "settings.group.model": "モデル",
+    "settings.label.theme": "テーマモード",
+    "settings.desc.theme": "アプリケーションの外観",
+    "settings.theme.auto": "システム設定を使用",
+    "settings.theme.light": "ライト",
+    "settings.theme.dark": "ダーク",
     "settings.label.language": "言語",
-    "settings.msg.restart": "一部の変更は再起動後に有効になります。",
+    "settings.desc.language": "ユーザーインターフェイス言語",
+    "settings.lang.auto": "システム設定を使用",
+    "settings.lang.en": "英語",
+    "settings.lang.zh": "中国語",
+    "settings.lang.ja": "日本語",
+    "settings.label.model_dir": "モデルディレクトリ",
+    "settings.btn.browse": "参照",
+    "settings.placeholder.no_dir": "ディレクトリが選択されていません",
+    "settings.msg.restart_title": "再起動が必要",
+    "settings.msg.restart": "変更を適用するにはアプリケーションを再起動してください",
 
     "prop.group.numbering": "番号付与規則",
 
@@ -159,4 +172,3 @@
     
     "prop.title": "プロパティ"
 }
-

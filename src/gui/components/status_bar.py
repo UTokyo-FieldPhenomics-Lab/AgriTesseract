@@ -1,6 +1,6 @@
 
 from PySide6.QtWidgets import QStatusBar, QLabel, QWidget
-from src.gui.i18n import tr
+from src.gui.config import tr
 
 class StatusBar(QStatusBar):
     """

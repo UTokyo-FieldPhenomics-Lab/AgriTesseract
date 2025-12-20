@@ -1,5 +1,6 @@
+
 {
-    "app.title": "EasyPlantFieldID - GIS 预处理工具",
+    "app.title": "EasyPlantFieldID",
     "nav.subplot": "小样地生成",
     "nav.seedling": "苗位置检测",
     "nav.rename": "苗ID重命名",
@@ -94,12 +95,24 @@
     "page.anno.btn.train": "训练 YOLO",
     "page.anno.btn.switch": "切换模型",
 
-    "settings.group.model": "模型配置",
-    "settings.label.model_dir": "模型权重文件夹",
-    "settings.btn.browse": "浏览...",
     "settings.group.general": "常规",
+    "settings.group.model": "模型",
+    "settings.label.theme": "主题模式",
+    "settings.desc.theme": "应用程序外观",
+    "settings.theme.auto": "跟随系统",
+    "settings.theme.light": "浅色",
+    "settings.theme.dark": "深色",
     "settings.label.language": "语言",
-    "settings.msg.restart": "更改语言将在下次启动时生效。",
+    "settings.desc.language": "用户界面语言",
+    "settings.lang.auto": "跟随系统",
+    "settings.lang.en": "英语",
+    "settings.lang.zh": "中文",
+    "settings.lang.ja": "日语",
+    "settings.label.model_dir": "模型目录",
+    "settings.btn.browse": "浏览",
+    "settings.placeholder.no_dir": "未选择目录",
+    "settings.msg.restart_title": "需要重启",
+    "settings.msg.restart": "请重启应用程序以应用更改",
 
     "prop.group.numbering": "编号规则",
 
@@ -159,4 +172,3 @@
     
     "prop.title": "属性"
 }
-

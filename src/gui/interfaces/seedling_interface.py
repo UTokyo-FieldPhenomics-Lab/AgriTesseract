@@ -17,7 +17,7 @@ from qfluentwidgets import (
 
 from src.gui.interfaces.map_interface import MapInterface
 from src.gui.interfaces.base_interface import PageGroup
-from src.gui.i18n import tr
+from src.gui.config import tr
 
 
 class SeedlingInterface(MapInterface):

@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from loguru import logger
 
-from src.gui.i18n import tr
+from src.gui.config import tr
 
 
 class PropertyGroup(QGroupBox):
