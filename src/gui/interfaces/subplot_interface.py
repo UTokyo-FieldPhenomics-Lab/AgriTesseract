@@ -159,7 +159,7 @@ class SubplotInterface(MapInterface):
         )
         if file_path:
             logger.info(f"User selected image: {file_path}")
-            if self.map_component.map_canvas.load_geotiff(file_path):
+            if self.map_component.map_canvas.add_raster_layer(file_path):
                 logger.info("Image loaded successfully.")
                 # Show success message
                 InfoBar.success(

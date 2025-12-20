@@ -625,9 +625,12 @@ class MapCanvas(QWidget):
 
         try:
             # Convert geo coordinates to rasterio window
-            window = dataset.window(geo_left, geo_top, geo_right, geo_bottom)
+            # rasterio.window(left, bottom, right, top)
+            window = dataset.window(geo_left, geo_bottom, geo_right, geo_top)
+            logger.debug(f"View Rect: {view_rect}, Window: {window}")
         except rasterio.errors.WindowError:
             # View is outside image bounds
+            logger.debug("View outside image bounds")
             image_item.clear()
             return
 
@@ -648,10 +651,14 @@ class MapCanvas(QWidget):
                 resampling=rasterio.enums.Resampling.nearest,
                 boundless=True
             )
+            
+            logger.debug(f"Read data shape: {data.shape}, Range: {data.min()} - {data.max()}")
 
-            # Transpose from (B, H, W) to (H, W, B)
+            # Transpose from (B, H, W) to (W, H, B) for pyqtgraph (x, y, c)
             if data.ndim == 3:
-                data = data.transpose((1, 2, 0))
+                data = data.transpose((2, 1, 0))
+                # Flip Y axis (axis 1) because rasterio is Top-Down, pg is Bottom-Up
+                data = np.flip(data, axis=1)
 
                 # Handle alpha channel if present
                 if data.shape[2] == 4:
@@ -660,6 +667,17 @@ class MapCanvas(QWidget):
                 elif data.shape[2] >= 3:
                     # RGB or more - take first 3 channels
                     data = data[:, :, :3]
+            
+            # Simple normalization if data is typically 16-bit or not 0-255
+            # This is a basic check. For now just log.
+            if data.dtype != np.uint8:
+                 # logger.debug(f"Data type is {data.dtype}, normalizing for display")
+                 # Normalize to 0-255 for display if not uint8
+                 # This might be slow for real-time, but good for testing visibility
+                 if data.max() > 0:
+                     data = (data / data.max() * 255).astype(np.uint8)
+                 else:
+                     data = data.astype(np.uint8)
 
             # Update image item
             image_item.clear()
@@ -673,6 +691,7 @@ class MapCanvas(QWidget):
                 geo_top - geo_bottom
             )
             image_item.setRect(img_rect)
+            # logger.debug(f"Image updated. Rect: {img_rect}")
 
         except Exception as e:
             logger.error(f"Error loading visible region: {e}")
