@@ -14,14 +14,13 @@ from qfluentwidgets import (
     Theme
 )
 
-from src.gui.config import cfg
+from src.gui.config import cfg, tr
 from src.gui.interfaces.subplot_interface import SubplotInterface
 from src.gui.interfaces.seedling_interface import SeedlingInterface
 from src.gui.interfaces.rename_interface import RenameInterface
 from src.gui.interfaces.timeseries_interface import TimeSeriesInterface
 from src.gui.interfaces.annotate_interface import AnnotateInterface
 from src.gui.interfaces.settings_interface import SettingsInterface
-from src.gui.config import tr, translator
 
 class MainWindow(FluentWindow):
     """
@@ -30,15 +29,6 @@ class MainWindow(FluentWindow):
 
     def __init__(self):
         super().__init__()
-        
-        self.setWindowTitle(tr("app.title"))
-        self.resize(1200, 800)
-        
-        # Initialize Translator
-        self.translator = translator
-
-        # Apply Theme
-        setTheme(cfg.get(cfg.themeMode))
 
         # Create interfaces
         self.subplot_interface = SubplotInterface(self)
@@ -46,7 +36,7 @@ class MainWindow(FluentWindow):
         self.rename_interface = RenameInterface(self)
         self.timeseries_interface = TimeSeriesInterface(self)
         self.annotate_interface = AnnotateInterface(self)
-        self.settings_interface = SettingsInterface(self.translator, self)
+        self.settings_interface = SettingsInterface(self)
 
         # Set object names for FluentWindow navigation
         self.subplot_interface.setObjectName("subplot_interface")
@@ -71,6 +61,7 @@ class MainWindow(FluentWindow):
         
         self.navigationInterface.addSeparator()
 
+        # add custom widget to bottom
         self.addSubInterface(
             self.settings_interface, 
             FIF.SETTING, 
@@ -78,14 +69,31 @@ class MainWindow(FluentWindow):
             NavigationItemPosition.BOTTOM
         )
 
+        # NOTE: enable acrylic effect
+        self.navigationInterface.setAcrylicEnabled(True)
+
+        # disable pop animation
+        # self.stackedWidget.setAnimationEnabled(False)
+
     def init_window(self):
+        self.resize(1200, 800)
+
         # Set window icon if available
         # self.setWindowIcon(QIcon("path/to/icon.png"))
+
+        self.setWindowTitle(tr("app.title"))
+
+        # Apply Theme
+        setTheme(cfg.get(cfg.themeMode))
         
         # Center window
         desktop = QApplication.primaryScreen().availableGeometry()
         w, h = desktop.width(), desktop.height()
         self.move(w//2 - self.width()//2, h//2 - self.height()//2)
+
+        # set the minimum window width that allows the navigation panel to be expanded
+        # self.navigationInterface.setMinimumExpandWidth(600)
+        # self.navigationInterface.expand(useAni=False)
 
     def closeEvent(self, event):
         logger.info("MainWindow closing")

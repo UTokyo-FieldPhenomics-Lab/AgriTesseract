@@ -33,7 +33,7 @@ class Config(QConfig):
     
     # Theme Mode: Light, Dark, Auto
     themeMode = OptionsConfigItem(
-        "General", "ThemeMode", Theme.AUTO, OptionsValidator(Theme), EnumSerializer(Theme), restart=False
+        "General", "ThemeMode", Theme.LIGHT, OptionsValidator(Theme), EnumSerializer(Theme), restart=False
     )
     
     # Language: Auto, English, Chinese, Japanese

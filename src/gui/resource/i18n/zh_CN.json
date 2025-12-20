@@ -101,7 +101,7 @@
     "settings.desc.theme": "应用程序外观",
     "settings.theme.auto": "跟随系统",
     "settings.theme.light": "浅色",
-    "settings.theme.dark": "深色",
+    "settings.theme.dark": "深色(未实现)",
     "settings.label.language": "语言",
     "settings.desc.language": "用户界面语言",
     "settings.lang.auto": "跟随系统",

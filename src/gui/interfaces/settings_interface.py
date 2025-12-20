@@ -22,9 +22,8 @@ class SettingsInterface(ScrollArea):
     """
     Settings Interface.
     """
-    def __init__(self, translator: translator, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.translator = translator
         
         self.scrollWidget = QWidget()
         self.expandLayout = ExpandLayout(self.scrollWidget)
@@ -54,9 +53,9 @@ class SettingsInterface(ScrollArea):
             tr("settings.label.theme"),
             tr("settings.desc.theme"),
             texts=[
-                tr("settings.theme.auto"),
                 tr("settings.theme.light"),
-                tr("settings.theme.dark")
+                tr("settings.theme.dark"),
+                tr("settings.theme.auto"),
             ],
             parent=self.generalGroup
         )
@@ -122,7 +121,7 @@ class SettingsInterface(ScrollArea):
         )
         if directory:
             self.modelDirCard.setContent(directory)
-            cfg.modelDir.setValue(directory)
+            cfg.set(cfg.modelDir, directory)
 
     def _on_restart_needed(self):
         """Show restart warning."""
@@ -152,5 +151,5 @@ class SettingsInterface(ScrollArea):
 
     def setLanguage(self, language: Language):
         """Set language."""
-        self.translator.set_language(language)
+        translator.set_language(language)
         self._on_restart_needed()

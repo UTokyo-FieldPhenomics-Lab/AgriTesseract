@@ -37,7 +37,7 @@ def main() -> int:
     """
     from loguru import logger
     from PySide6.QtWidgets import QApplication
-    import pyqtgraph as pg
+    # import pyqtgraph as pg
 
     # Configure logging
     logger.remove()
@@ -53,19 +53,16 @@ def main() -> int:
     logger.info("Starting EasyPlantFieldID...")
 
     # Configure PyQtGraph
-    pg.setConfigOptions(
-        imageAxisOrder='row-major',
-        antialias=True,
-    )
+    # pg.setConfigOptions(
+    #     imageAxisOrder='row-major',
+    #     antialias=True,
+    # )
 
     # Create application
     app = QApplication(sys.argv)
-    app.setApplicationName("EasyPlantFieldID")
-    app.setApplicationVersion("0.1.0")
-    app.setOrganizationName("UTokyo-FieldPhenomics-Lab")
-
-    # Set application style
-    app.setStyle("Fusion")
+    # app.setApplicationName("EasyPlantFieldID")
+    # app.setApplicationVersion("0.1.0")
+    # app.setOrganizationName("UTokyo-FieldPhenomics-Lab")
 
     # Import and create main window
     from src.gui.main_window import MainWindow
