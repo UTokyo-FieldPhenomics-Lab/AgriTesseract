@@ -79,7 +79,7 @@ class MainWindow(FluentWindow):
         self.resize(1200, 800)
 
         # Set window icon if available
-        # self.setWindowIcon(QIcon("path/to/icon.png"))
+        self.setWindowIcon(QIcon(":/qfluentwidgets/images/logo.png"))
 
         self.setWindowTitle(tr("app.title"))
 
@@ -92,7 +92,8 @@ class MainWindow(FluentWindow):
         self.move(w//2 - self.width()//2, h//2 - self.height()//2)
 
         # set the minimum window width that allows the navigation panel to be expanded
-        # self.navigationInterface.setMinimumExpandWidth(600)
+        self.navigationInterface.setMinimumExpandWidth(600)
+        self.navigationInterface.setExpandWidth(200)
         # self.navigationInterface.expand(useAni=False)
 
     def closeEvent(self, event):
