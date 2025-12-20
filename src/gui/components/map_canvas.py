@@ -26,7 +26,7 @@ pg.setConfigOptions(
 )
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, Signal, QTimer, QRectF
+from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
 from PySide6.QtGui import QWheelEvent
 from loguru import logger
 
@@ -512,13 +512,42 @@ class MapCanvas(QWidget):
             Rotation angle in degrees.
         """
         self._rotation_angle = angle
+        
+        # Calculate center of all visible layers
+        center = self._get_content_center()
+        if center:
+            self._item_group.setTransformOriginPoint(center)
+            
         self._item_group.setRotation(-angle)
         self.sigRotationChanged.emit(angle)
-        logger.debug(f"Rotation set to: {angle}°")
+        logger.debug(f"Rotation set to: {angle}° around {center}")
 
     def get_rotation(self) -> float:
         """Get the current rotation angle."""
         return self._rotation_angle
+        
+    def _get_content_center(self) -> Optional[QPointF]:
+        """Calculate the center of all layers."""
+        if not self._layers:
+            return None
+            
+        # If boundary layer exists, use its center
+        if "Boundary" in self._layers:
+            bounds = self._layers["Boundary"].get('bounds')
+            if bounds:
+                center_x = (bounds.left + bounds.right) / 2
+                center_y = (bounds.bottom + bounds.top) / 2
+                return QPointF(center_x, center_y)
+                
+        # Otherwise use the first visible layer
+        for layer in self._layers.values():
+            if layer['visible'] and 'bounds' in layer:
+                bounds = layer['bounds']
+                center_x = (bounds.left + bounds.right) / 2
+                center_y = (bounds.bottom + bounds.top) / 2
+                return QPointF(center_x, center_y)
+                
+        return None
 
     def set_mode(self, mode: int) -> None:
         """
