@@ -8,9 +8,11 @@
     "nav.annotate": "Annotation & Train",
     "nav.settings": "Settings",
     
+    
     "layer_panel.title": "Layers",
     "layer_panel.add_tooltip": "Add Layer",
     "layer_panel.remove_tooltip": "Remove Selected Layer",
+    "layer_panel.menu.add": "Add Layer",
     "layer_panel.menu.zoom": "Zoom to Layer",
     "layer_panel.menu.delete": "Delete",
     "layer_panel.confirm.delete.title": "Delete Layer",
@@ -22,6 +24,10 @@
     "status.coord": "Coord: X: {x:.2f}, Y: {y:.2f}",
     "status.zoom": "Zoom: {zoom:.0f}%",
     "status.rotation": "Rotation: {angle:.2f}°",
+
+    "error": "Error",
+    "warning": "Warning",
+    "success": "Success",
 
     "page.common.file": "File",
     "page.common.save": "Save SHP",
@@ -42,6 +48,13 @@
     "page.subplot.check.preview": "Live Preview",
     "page.subplot.btn.focus": "Focus & Rotate",
     "page.subplot.btn.generate": "Generate & Save",
+
+    "page.subplot.dialog.load_image": "Load Background Image",
+    "page.subplot.dialog.load_boundary": "Load Plot Boundary Shapefile",
+    "page.subplot.dialog.save_shp": "Save Subplots",
+    "page.subplot.error.invalid_boundary": "Invalid boundary file! Please select a Shapefile containing exactly one Polygon.",
+    "page.subplot.warning.no_boundary": "Please load a boundary file first!",
+    "page.subplot.success.generated": "Subplots generated and saved successfully!",
 
     "page.seedling.group.sam": "SAM3 Detection",
     "page.seedling.label.prompt": "Prompt:",
@@ -170,16 +183,5 @@
     "prop.label.annotated": "Annotated Images",
     "prop.label.model_status": "Model Status",
     
-    "prop.title": "Properties",
-
-    "error": "Error",
-    "warning": "Warning",
-    "success": "Success",
-
-    "page.subplot.dialog.load_image": "Load Background Image",
-    "page.subplot.dialog.load_boundary": "Load Plot Boundary Shapefile",
-    "page.subplot.dialog.save_shp": "Save Subplots",
-    "page.subplot.error.invalid_boundary": "Invalid boundary file! Please select a Shapefile containing exactly one Polygon.",
-    "page.subplot.warning.no_boundary": "Please load a boundary file first!",
-    "page.subplot.success.generated": "Subplots generated and saved successfully!"
+    "prop.title": "Properties"
 }

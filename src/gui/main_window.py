@@ -101,7 +101,7 @@ class MainWindow(FluentWindow):
         # Cleanup interfaces
         for interface in [self.subplot_tab, self.seedling_tab, 
                           self.rename_tab, self.timeseries_tab, 
-                          self.annotate_interface]:
+                          self.annotate_tab]:
             if hasattr(interface, 'map_component'):
                 interface.map_component.cleanup()
         super().closeEvent(event)

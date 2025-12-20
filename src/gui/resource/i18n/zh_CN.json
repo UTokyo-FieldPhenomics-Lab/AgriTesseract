@@ -11,6 +11,7 @@
     "layer_panel.title": "图层",
     "layer_panel.add_tooltip": "添加图层",
     "layer_panel.remove_tooltip": "删除选中图层",
+    "layer_panel.menu.add": "添加图层",
     "layer_panel.menu.zoom": "缩放到图层",
     "layer_panel.menu.delete": "删除",
     "layer_panel.confirm.delete.title": "删除图层",
@@ -22,6 +23,10 @@
     "status.coord": "坐标: X: {x:.2f}, Y: {y:.2f}",
     "status.zoom": "缩放: {zoom:.0f}%",
     "status.rotation": "旋转角度: {angle:.2f}°",
+
+    "error": "错误",
+    "warning": "警告",
+    "success": "成功",
 
     "page.common.file": "文件",
     "page.common.save": "保存 SHP",
@@ -42,6 +47,13 @@
     "page.subplot.check.preview": "实时预览",
     "page.subplot.btn.focus": "聚焦旋转",
     "page.subplot.btn.generate": "生成保存",
+
+    "page.subplot.dialog.load_image": "背景影像加载",
+    "page.subplot.dialog.load_boundary": "边界SHP加载",
+    "page.subplot.dialog.save_shp": "小样地保存",
+    "page.subplot.error.invalid_boundary": "边界文件格式错误！",
+    "page.subplot.warning.no_boundary": "请先加载边界文件！",
+    "page.subplot.success.generated": "小样地生成和保存成功！",
 
     "page.seedling.group.sam": "SAM3 检测",
     "page.seedling.label.prompt": "提示词:",

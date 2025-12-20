@@ -79,6 +79,7 @@ class MapComponent(QWidget):
         self.map_canvas.sigRotationChanged.connect(self.sigRotationChanged.emit)
 
         # Map Canvas <-> Layer Panel Sync
+        self.layer_panel.sigZoomToLayer.connect(self.map_canvas.zoom_to_layer)
         self.map_canvas.sigLayerAdded.connect(self.layer_panel.add_layer)
         self.map_canvas.sigLayerRemoved.connect(self.layer_panel.remove_layer)
         self.layer_panel.sigLayerDeleted.connect(self.map_canvas.remove_layer)
