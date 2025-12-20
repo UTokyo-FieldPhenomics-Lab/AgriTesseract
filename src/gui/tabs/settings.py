@@ -18,7 +18,7 @@ from qfluentwidgets import FluentIcon as FIF
 
 from src.gui.config import cfg, Language, tr, translator
 
-class SettingsInterface(ScrollArea):
+class SettingsTab(ScrollArea):
     """
     Settings Interface.
     """

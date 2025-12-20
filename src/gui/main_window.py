@@ -15,12 +15,12 @@ from qfluentwidgets import (
 )
 
 from src.gui.config import cfg, tr
-from src.gui.interfaces.subplot_interface import SubplotInterface
-from src.gui.interfaces.seedling_interface import SeedlingInterface
-from src.gui.interfaces.rename_interface import RenameInterface
-from src.gui.interfaces.timeseries_interface import TimeSeriesInterface
-from src.gui.interfaces.annotate_interface import AnnotateInterface
-from src.gui.interfaces.settings_interface import SettingsInterface
+from src.gui.tabs.subplot_generate import SubplotTab
+from src.gui.tabs.seedling_detect import SeedlingTab
+from src.gui.tabs.rename_ids import RenameTab
+from src.gui.tabs.timeseries_crop import TimeSeriesTab
+from src.gui.tabs.active_annotate import ActiveAnnotateTab
+from src.gui.tabs.settings import SettingsTab
 
 class MainWindow(FluentWindow):
     """
@@ -31,20 +31,20 @@ class MainWindow(FluentWindow):
         super().__init__()
 
         # Create interfaces
-        self.subplot_interface = SubplotInterface(self)
-        self.seedling_interface = SeedlingInterface(self)
-        self.rename_interface = RenameInterface(self)
-        self.timeseries_interface = TimeSeriesInterface(self)
-        self.annotate_interface = AnnotateInterface(self)
-        self.settings_interface = SettingsInterface(self)
+        self.subplot_tab = SubplotTab(self)
+        self.seedling_tab = SeedlingTab(self)
+        self.rename_tab = RenameTab(self)
+        self.timeseries_tab = TimeSeriesTab(self)
+        self.annotate_tab = ActiveAnnotateTab(self)
+        self.settings_tab = SettingsTab(self)
 
         # Set object names for FluentWindow navigation
-        self.subplot_interface.setObjectName("subplot_interface")
-        self.seedling_interface.setObjectName("seedling_interface")
-        self.rename_interface.setObjectName("rename_interface")
-        self.timeseries_interface.setObjectName("timeseries_interface")
-        self.annotate_interface.setObjectName("annotate_interface")
-        self.settings_interface.setObjectName("settings_interface")
+        self.subplot_tab.setObjectName("subplot_tab")
+        self.seedling_tab.setObjectName("seedling_tab")
+        self.rename_tab.setObjectName("rename_tab")
+        self.timeseries_tab.setObjectName("timeseries_tab")
+        self.annotate_tab.setObjectName("annotate_tab")
+        self.settings_tab.setObjectName("settings_tab")
 
         self.init_navigation()
         self.init_window()
@@ -53,17 +53,17 @@ class MainWindow(FluentWindow):
 
     def init_navigation(self):
         # Add interfaces to navigation
-        self.addSubInterface(self.subplot_interface, FIF.TILES, tr("nav.subplot"))
-        self.addSubInterface(self.seedling_interface, FIF.LEAF, tr("nav.seedling"))
-        self.addSubInterface(self.rename_interface, FIF.EDIT, tr("nav.rename"))
-        self.addSubInterface(self.timeseries_interface, FIF.HISTORY, tr("nav.timeseries"))
-        self.addSubInterface(self.annotate_interface, FIF.PENCIL_INK, tr("nav.annotate"))
+        self.addSubInterface(self.subplot_tab, FIF.TILES, tr("nav.subplot"))
+        self.addSubInterface(self.seedling_tab, FIF.LEAF, tr("nav.seedling"))
+        self.addSubInterface(self.rename_tab, FIF.EDIT, tr("nav.rename"))
+        self.addSubInterface(self.timeseries_tab, FIF.HISTORY, tr("nav.timeseries"))
+        self.addSubInterface(self.annotate_tab, FIF.PENCIL_INK, tr("nav.annotate"))
         
         self.navigationInterface.addSeparator()
 
         # add custom widget to bottom
         self.addSubInterface(
-            self.settings_interface, 
+            self.settings_tab, 
             FIF.SETTING, 
             tr("nav.settings"), 
             NavigationItemPosition.BOTTOM
@@ -99,8 +99,8 @@ class MainWindow(FluentWindow):
     def closeEvent(self, event):
         logger.info("MainWindow closing")
         # Cleanup interfaces
-        for interface in [self.subplot_interface, self.seedling_interface, 
-                          self.rename_interface, self.timeseries_interface, 
+        for interface in [self.subplot_tab, self.seedling_tab, 
+                          self.rename_tab, self.timeseries_tab, 
                           self.annotate_interface]:
             if hasattr(interface, 'map_component'):
                 interface.map_component.cleanup()

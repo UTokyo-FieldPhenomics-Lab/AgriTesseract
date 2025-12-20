@@ -16,12 +16,12 @@ from qfluentwidgets import (
 from loguru import logger
 from pathlib import Path
 
-from src.gui.interfaces.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import MapInterface, PageGroup
 from src.gui.config import tr
 from src.core.subplot_generator import SubplotGenerator
 
 
-class SubplotInterface(MapInterface):
+class SubplotTab(MapInterface):
     """
     Interface content for Subplot Generation.
     """

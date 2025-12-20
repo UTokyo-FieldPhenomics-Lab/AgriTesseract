@@ -18,12 +18,12 @@ def verify():
         print("MainWindow instantiated successfully.")
         
         # Check if key components exist
-        if not hasattr(window, 'subplot_interface'):
-            print("ERROR: subplot_interface missing")
+        if not hasattr(window, 'subplot_tab'):
+            print("ERROR: subplot_tab missing")
             return False
 
-        if not hasattr(window, 'settings_interface'):
-            print("ERROR: settings_interface missing")
+        if not hasattr(window, 'settings_tab'):
+            print("ERROR: settings_tab missing")
             return False
             
         print("MainWindow components verified.")

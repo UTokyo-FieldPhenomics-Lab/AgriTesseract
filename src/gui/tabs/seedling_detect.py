@@ -15,11 +15,11 @@ from qfluentwidgets import (
     DoubleSpinBox,
 )
 
-from src.gui.interfaces.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import MapInterface, PageGroup
 from src.gui.config import tr
 
 
-class SeedlingInterface(MapInterface):
+class SeedlingTab(MapInterface):
     """
     Interface content for Seedling Detection.
     """
