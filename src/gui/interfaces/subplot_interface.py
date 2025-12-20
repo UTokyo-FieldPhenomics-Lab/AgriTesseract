@@ -13,6 +13,9 @@ from qfluentwidgets import (
     InfoBarPosition
 )
 
+from loguru import logger
+from pathlib import Path
+
 from src.gui.interfaces.base_interface import MapInterface, PageGroup
 from src.gui.config import tr
 from src.core.subplot_generator import SubplotGenerator
@@ -31,6 +34,27 @@ class SubplotInterface(MapInterface):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._init_controls()
+
+    def _init_layout(self):
+        super()._init_layout()
+        
+        # Connect Property Panel signals
+        subplot_panel = self.property_panel.get_subplot_panel()
+        subplot_panel.spin_rotation.valueChanged.connect(self._on_panel_rotation_changed)
+        
+        # Connect Map Canvas signals
+        self.map_component.map_canvas.sigRotationChanged.connect(self._on_canvas_rotation_changed)
+
+    def _on_panel_rotation_changed(self, value):
+        """Handle rotation change from property panel."""
+        self.map_component.map_canvas.set_rotation(value)
+
+    def _on_canvas_rotation_changed(self, angle):
+        """Handle rotation change from map canvas."""
+        subplot_panel = self.property_panel.get_subplot_panel()
+        subplot_panel.spin_rotation.blockSignals(True)
+        subplot_panel.spin_rotation.setValue(angle)
+        subplot_panel.spin_rotation.blockSignals(False)
 
     def _init_controls(self) -> None:
         """Initialize the controls for subplot generation."""
@@ -134,7 +158,28 @@ class SubplotInterface(MapInterface):
             self, tr("page.subplot.dialog.load_image"), "", "Image Files (*.tif *.tiff *.png *.jpg);;All Files (*)"
         )
         if file_path:
-            self.map_component.map_canvas.load_geotiff(file_path)
+            logger.info(f"User selected image: {file_path}")
+            if self.map_component.map_canvas.load_geotiff(file_path):
+                logger.info("Image loaded successfully.")
+                # Show success message
+                InfoBar.success(
+                    title=tr("success"),
+                    content=f"Loaded: {Path(file_path).name}",
+                    parent=self,
+                    duration=3000
+                )
+                
+                # Zoom to image if no boundary loaded
+                if self.boundary_gdf is None:
+                    self.map_component.map_canvas.zoom_to_layer(Path(file_path).stem)
+                    
+            else:
+                logger.error(f"Failed to load image: {file_path}")
+                InfoBar.error(
+                    title=tr("error"),
+                    content=f"Failed to load image: {file_path}",
+                    parent=self
+                )
 
     @Slot()
     def _on_load_boundary(self):
@@ -188,9 +233,16 @@ class SubplotInterface(MapInterface):
 
     @Slot()
     def _on_focus(self):
-        """Focus on boundary layer."""
+        """Focus on boundary layer and auto-rotate."""
         if self.boundary_gdf is not None:
             self.map_component.map_canvas.zoom_to_layer("Boundary")
+            
+            # Auto-rotate
+            angle = self.generator.calculate_optimal_rotation(self.boundary_gdf)
+            if angle is not None:
+                self.map_component.map_canvas.set_rotation(angle)
+            else:
+                self.map_component.map_canvas.set_rotation(0)
 
     @Slot()
     def _on_generate(self):

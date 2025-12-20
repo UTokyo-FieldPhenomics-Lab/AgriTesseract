@@ -218,3 +218,53 @@ class SubplotGenerator:
             logger.info(f"Saved subplots to {output_path}")
             
         return gdf_out
+        
+    def calculate_optimal_rotation(self, boundary_gdf: gpd.GeoDataFrame) -> Optional[float]:
+        """
+        Calculate rotation angle to make the longest edge of MAR horizontal.
+        
+        Returns
+        -------
+        float
+            Rotation angle in degrees.
+        """
+        if len(boundary_gdf) != 1:
+            return None
+            
+        polygon = boundary_gdf.geometry.iloc[0]
+        mar = polygon.minimum_rotated_rectangle
+        coords = list(mar.exterior.coords)
+        if len(coords) < 4:
+            return None
+            
+        # Determine long edge
+        p0 = np.array(coords[0])
+        p1 = np.array(coords[1])
+        p2 = np.array(coords[2])
+        
+        edge1 = p1 - p0
+        edge2 = p2 - p1
+        
+        len1 = np.linalg.norm(edge1)
+        len2 = np.linalg.norm(edge2)
+        
+        if len1 >= len2:
+            # edge1 is long edge
+            vec = edge1
+        else:
+            # edge2 is long edge
+            vec = edge2
+            
+        # Calculate angle of this vector
+        angle_rad = math.atan2(vec[1], vec[0])
+        angle_deg = math.degrees(angle_rad)
+        
+        # We probably want to align long edge to X axis (0 degrees)
+        # So we rotate by -angle
+        # But MapCanvas.set_rotation usually takes positive = clockwise or counter-clockwise?
+        # QGIS setRotation(angle) rotates the MAP VIEW.
+        # If map is rotated by +angle, the content rotates by -angle.
+        # If vector is at 30 deg, we want to rotate VIEW by 30 deg to make it horizontal?
+        # Yes.
+        
+        return angle_deg

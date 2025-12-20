@@ -18,6 +18,13 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
+
+pg.setConfigOptions(
+    antialias=True,
+    background='w',
+    foreground='k'
+)
+
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal, QTimer, QRectF
 from PySide6.QtGui import QWheelEvent
@@ -151,6 +158,10 @@ class MapCanvas(QWidget):
     sigZoomChanged = Signal(float)
     sigRotationChanged = Signal(float)
     sigLayerClicked = Signal(str, float, float)
+    
+    # New signals for layer panel sync
+    sigLayerAdded = Signal(str, str) # name, type
+    sigLayerRemoved = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -215,7 +226,7 @@ class MapCanvas(QWidget):
         self._image_item = pg.ImageItem()
         self._item_group.addItem(self._image_item)
 
-    def load_geotiff(self, filepath: str, layer_name: Optional[str] = None) -> bool:
+    def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:
         """
         Load a GeoTiff file as a layer.
 
@@ -283,11 +294,13 @@ class MapCanvas(QWidget):
             # Trigger initial tile load
             self._update_visible_tiles()
 
+            self.sigLayerAdded.emit(layer_name, "Raster")
             return True
 
         except Exception as e:
             logger.error(f"Failed to load GeoTiff: {e}")
             return False
+
     def add_vector_layer(
         self, 
         data: Any, 
@@ -411,6 +424,7 @@ class MapCanvas(QWidget):
                     self._view_box.setRange(rect)
                 
                 logger.info(f"Loaded vector layer: {layer_name}")
+                self.sigLayerAdded.emit(layer_name, "Vector")
                 return True
                 
             return False
@@ -418,6 +432,8 @@ class MapCanvas(QWidget):
         except Exception as e:
             logger.error(f"Failed to load vector layer: {e}")
             return False
+
+    def remove_layer(self, layer_name: str) -> bool:
         """
         Remove a layer from the canvas.
 
@@ -437,7 +453,9 @@ class MapCanvas(QWidget):
         layer_info = self._layers[layer_name]
 
         # Remove item from scene
-        self._item_group.removeItem(layer_info['item'])
+        layer_info['item'].setParentItem(None)
+        if layer_info['item'].scene():
+            layer_info['item'].scene().removeItem(layer_info['item'])
 
         # Close dataset
         if 'dataset' in layer_info and layer_info['dataset'] is not None:
@@ -449,6 +467,7 @@ class MapCanvas(QWidget):
             self._layer_order.remove(layer_name)
 
         logger.debug(f"Layer removed: {layer_name}")
+        self.sigLayerRemoved.emit(layer_name)
         return True
 
     def set_layer_visibility(self, layer_name: str, visible: bool) -> None:

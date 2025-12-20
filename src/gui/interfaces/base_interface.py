@@ -4,13 +4,18 @@ Base classes for tool pages (formerly Ribbon components).
 
 from typing import Optional
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QSplitter,
     QGroupBox,
     QStatusBar,
 )
+
+from src.gui.components.map_component import MapComponent
+from src.gui.components.property_panel import PropertyPanel
 
 class PageGroup(QGroupBox):
     """
