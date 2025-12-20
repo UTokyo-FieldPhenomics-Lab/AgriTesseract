@@ -31,6 +31,15 @@ except ImportError:
     HAS_RASTERIO = False
     logger.warning("rasterio not installed. GeoTiff loading will be disabled.")
 
+try:
+    import geopandas as gpd
+    import shapely
+    from shapely.geometry import Polygon, MultiPolygon
+    HAS_GEOPANDAS = True
+except ImportError:
+    HAS_GEOPANDAS = False
+    logger.warning("geopandas not installed. Vector loading will be disabled.")
+
 
 class CustomViewBox(pg.ViewBox):
     """
@@ -279,8 +288,136 @@ class MapCanvas(QWidget):
         except Exception as e:
             logger.error(f"Failed to load GeoTiff: {e}")
             return False
+    def add_vector_layer(
+        self, 
+        data: Any, 
+        layer_name: str, 
+        color: str = 'g', 
+        width: int = 2
+    ) -> bool:
+        """
+        Add a vector layer (GeoDataFrame or shapefile path).
 
-    def remove_layer(self, layer_name: str) -> bool:
+        Parameters
+        ----------
+        data : Any
+            gpd.GeoDataFrame or path to shapefile.
+        layer_name : str
+            Name for the layer.
+        color : str
+            Color char (e.g. 'r', 'g', 'b', 'k') or hex.
+        width : int
+            Line width.
+
+        Returns
+        -------
+        bool
+            Success status.
+        """
+        if not HAS_GEOPANDAS:
+            logger.error("geopandas not installed")
+            return False
+
+        try:
+            # 1. Load data if path
+            if isinstance(data, (str, Path)):
+                gdf = gpd.read_file(data)
+            else:
+                gdf = data
+
+            if not isinstance(gdf, gpd.GeoDataFrame):
+                logger.error(f"Invalid data type for vector layer: {type(gdf)}")
+                return False
+
+            # 2. Check CRS and Reproject if needed (TODO: unified CRS management)
+            # For now, assume WGS84 or matching raster if raster loaded.
+            # But MapCanvas doesn't enforce CRS yet. Just display raw coords.
+            
+            # 3. Create Graphic Items
+            items = []
+            
+            # Use QPainterPath for complex geometries or PlotCurveItem for simple lines
+            # PyQtGraph's PlotCurveItem is good for many segments.
+            
+            # Combine all geometries into line segments for efficient drawing
+            all_x = []
+            all_y = []
+            connect = []
+            
+            for geom in gdf.geometry:
+                if geom is None:
+                    continue
+                    
+                if geom.geom_type == 'Polygon':
+                    x, y = geom.exterior.coords.xy
+                    all_x.extend(x)
+                    all_y.extend(y)
+                    # Create connections: 1 for connected, 0 for break
+                    # Last point connects to previous, but next polygon starts new
+                    # Connect array length = len(x)
+                    # 1, 1, ..., 1 (end of geom)
+                    # Actually pg uses connect='all' or array of ints.
+                    # easier: append nan to break line
+                    all_x.append(np.nan)
+                    all_y.append(np.nan)
+                    
+                    # Interiors (holes)
+                    for interior in geom.interiors:
+                         x, y = interior.coords.xy
+                         all_x.extend(x)
+                         all_y.extend(y)
+                         all_x.append(np.nan)
+                         all_y.append(np.nan)
+
+                elif geom.geom_type == 'MultiPolygon':
+                    for poly in geom.geoms:
+                        x, y = poly.exterior.coords.xy
+                        all_x.extend(x)
+                        all_y.extend(y)
+                        all_x.append(np.nan)
+                        all_y.append(np.nan)
+            
+            # Create PlotCurveItem (lines)
+            if all_x:
+                curve = pg.PlotCurveItem(
+                    x=np.array(all_x), 
+                    y=np.array(all_y), 
+                    pen=pg.mkPen(color=color, width=width),
+                    connect="finite" # Connects finite numbers, breaks on nan
+                )
+                curve.setZValue(100) # Vectors on top
+                
+                # Check bounds
+                min_x, min_y, max_x, max_y = gdf.total_bounds
+                bounds = rasterio.coords.BoundingBox(min_x, min_y, max_x, max_y)
+                
+                # Store
+                if layer_name in self._layers:
+                    self.remove_layer(layer_name)
+                    
+                self._layers[layer_name] = {
+                    'item': curve,
+                    'data': gdf,
+                    'visible': True,
+                    'bounds': bounds
+                }
+                self._layer_order.append(layer_name)
+                
+                self._item_group.addItem(curve)
+                
+                # Update view if first layer
+                if len(self._layers) == 1:
+                    rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+                    self._view_box.setRange(rect)
+                
+                logger.info(f"Loaded vector layer: {layer_name}")
+                return True
+                
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to load vector layer: {e}")
+            return False
         """
         Remove a layer from the canvas.
 

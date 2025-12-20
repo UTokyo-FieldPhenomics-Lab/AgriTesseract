@@ -170,6 +170,16 @@
     "prop.label.annotated": "Annotated Images",
     "prop.label.model_status": "Model Status",
     
-    "prop.title": "Properties"
+    "prop.title": "Properties",
 
+    "error": "Error",
+    "warning": "Warning",
+    "success": "Success",
+
+    "page.subplot.dialog.load_image": "Load Background Image",
+    "page.subplot.dialog.load_boundary": "Load Plot Boundary Shapefile",
+    "page.subplot.dialog.save_shp": "Save Subplots",
+    "page.subplot.error.invalid_boundary": "Invalid boundary file! Please select a Shapefile containing exactly one Polygon.",
+    "page.subplot.warning.no_boundary": "Please load a boundary file first!",
+    "page.subplot.success.generated": "Subplots generated and saved successfully!"
 }
