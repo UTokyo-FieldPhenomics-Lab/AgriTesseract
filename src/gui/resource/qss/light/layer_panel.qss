@@ -1,0 +1,30 @@
+
+#LayerTree {
+    background-color: transparent;
+    border: none;
+    color: black;
+}
+
+QTreeWidget {
+    background-color: transparent;
+    border: none;
+}
+
+QTreeWidget::item {
+    padding: 8px;
+    border-radius: 4px;
+    color: black;
+}
+
+QTreeWidget::item:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+QTreeWidget::item:selected {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: black;
+}
+
+QLabel {
+    color: black;
+}

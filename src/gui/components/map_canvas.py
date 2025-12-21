@@ -19,16 +19,16 @@ from pathlib import Path
 import numpy as np
 import pyqtgraph as pg
 
-pg.setConfigOptions(
-    antialias=True,
-    background='w',
-    foreground='k'
-)
+# Move global config to instance level or handle dynamically
+# pg.setConfigOptions(antialias=True)
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
 from PySide6.QtGui import QWheelEvent, QPolygonF, QTransform
 from loguru import logger
+from src.gui.config import cfg
+from qfluentwidgets import Theme, isDarkTheme
+import darkdetect
 
 try:
     import rasterio
@@ -189,6 +189,10 @@ class MapCanvas(QWidget):
 
         # Initialize UI
         self._init_ui()
+        
+        # Theme handling
+        self._update_theme()
+        cfg.themeChanged.connect(self._update_theme)
 
         logger.debug("MapCanvas initialized")
 
@@ -204,7 +208,7 @@ class MapCanvas(QWidget):
 
         # Create PlotWidget with custom ViewBox
         self._plot_widget = pg.PlotWidget(viewBox=self._view_box)
-        self._plot_widget.setBackground('w')
+        # Background set in _update_theme
         self._plot_widget.setAspectLocked(True)
 
         # Enable mouse tracking for coordinate display
@@ -798,33 +802,29 @@ class MapCanvas(QWidget):
         if 'bounds' not in first_layer:
             return
             
-        b = first_layer['bounds']
-        base_width = b.right - b.left
+    def _update_theme(self):
+        """Update canvas theme (background color)."""
+        theme = cfg.themeMode.value
+        is_dark = False
+        if theme == Theme.AUTO:
+            is_dark = darkdetect.isDark()
+        else:
+            is_dark = theme == Theme.DARK
+            
+        if is_dark:
+            bg_color = '#272727' # Match typical dark theme bg
+            fg_color = '#FFFFFF'
+        else:
+            bg_color = '#FFFFFF'
+            fg_color = '#000000'
+            
+        self._plot_widget.setBackground(bg_color)
+        # Axes are hidden, so we don't strictly need to update their pen
+        # If needed in future: self._plot_widget.getPlotItem().getAxis('left').setPen(fg_color)
         
-        # Calculate new width
-        # zoom = base / distinct_width * 100
-        # distinct_width = base / (zoom / 100)
+        logger.debug(f"MapCanvas theme updated. Dark: {is_dark}")
+            
+
         
-        target_width = base_width / (zoom_percent / 100.0)
-        
-        # Get current center to zoom around center
-        current_rect = self._view_box.viewRect()
-        center = current_rect.center()
-        
-        # We need to maintain aspect ratio, so height is derived
-        # ViewBox.setRange with padding=0 handles aspect if AspectLocked is True?
-        # If aspect locked, we just set range rect with desired width and arbitrary height?
-        # Or calculate height based on current aspect.
-        
-        current_aspect = current_rect.height() / current_rect.width() if current_rect.width() > 0 else 1.0
-        target_height = target_width * current_aspect
-        
-        new_rect = QRectF(
-            center.x() - target_width / 2,
-            center.y() - target_height / 2,
-            target_width,
-            target_height
-        )
-        
-        self._view_box.setRange(new_rect, padding=0)
+
 

@@ -10,7 +10,17 @@ from qfluentwidgets import (
     DoubleSpinBox,
     CheckBox,
     InfoBar,
-    InfoBarPosition
+    PushButton,
+    PrimaryPushButton,
+    ComboBox,
+    SpinBox,
+    DoubleSpinBox,
+    CheckBox,
+    InfoBar,
+    InfoBarPosition,
+    BodyLabel,
+    StrongBodyLabel,
+    SubtitleLabel
 )
 
 from loguru import logger
@@ -38,16 +48,8 @@ class SubplotTab(MapInterface):
     def _init_layout(self):
         super()._init_layout()
         
-        # Connect Property Panel signals
-        subplot_panel = self.property_panel.get_subplot_panel()
-        subplot_panel.spin_rotation.valueChanged.connect(self._on_panel_rotation_changed)
-        
         # Connect Map Canvas signals
         self.map_component.map_canvas.sigRotationChanged.connect(self._on_canvas_rotation_changed)
-
-    def _on_panel_rotation_changed(self, value):
-        """Handle rotation change from property panel."""
-        self.map_component.map_canvas.set_rotation(value)
 
     def _on_canvas_rotation_changed(self, angle):
         """Handle rotation change from map canvas."""
@@ -86,7 +88,7 @@ class SubplotTab(MapInterface):
         param_group = PageGroup(tr("page.subplot.group.param"))
 
         # Row/Col or Width/Height
-        self.lbl_cols = QLabel(tr("page.subplot.label.cols"))
+        self.lbl_cols = BodyLabel(tr("page.subplot.label.cols"))
         param_group.add_widget(self.lbl_cols)
         self.spin_cols = SpinBox()
         self.spin_cols.setRange(1, 100)
@@ -95,7 +97,7 @@ class SubplotTab(MapInterface):
         self.spin_cols.valueChanged.connect(self._auto_preview)
         param_group.add_widget(self.spin_cols)
 
-        self.lbl_rows = QLabel(tr("page.subplot.label.rows"))
+        self.lbl_rows = BodyLabel(tr("page.subplot.label.rows"))
         param_group.add_widget(self.lbl_rows)
         self.spin_rows = SpinBox()
         self.spin_rows.setRange(1, 100)
@@ -104,7 +106,7 @@ class SubplotTab(MapInterface):
         self.spin_rows.valueChanged.connect(self._auto_preview)
         param_group.add_widget(self.spin_rows)
 
-        param_group.add_widget(QLabel(tr("page.subplot.label.x_space")))
+        param_group.add_widget(BodyLabel(tr("page.subplot.label.x_space")))
         self.spin_x_spacing = DoubleSpinBox()
         self.spin_x_spacing.setRange(-10, 100)
         self.spin_x_spacing.setValue(0.0)
@@ -113,7 +115,7 @@ class SubplotTab(MapInterface):
         self.spin_x_spacing.valueChanged.connect(self._auto_preview)
         param_group.add_widget(self.spin_x_spacing)
 
-        param_group.add_widget(QLabel(tr("page.subplot.label.y_space")))
+        param_group.add_widget(BodyLabel(tr("page.subplot.label.y_space")))
         self.spin_y_spacing = DoubleSpinBox()
         self.spin_y_spacing.setRange(-10, 100)
         self.spin_y_spacing.setValue(0.0)

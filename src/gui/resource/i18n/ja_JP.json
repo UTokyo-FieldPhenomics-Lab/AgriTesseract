@@ -114,7 +114,7 @@
     "settings.desc.theme": "アプリケーションの外観",
     "settings.theme.auto": "システム設定を使用",
     "settings.theme.light": "ライト",
-    "settings.theme.dark": "ダーク(未実装)",
+    "settings.theme.dark": "ダーク",
     "settings.label.language": "言語",
     "settings.desc.language": "ユーザーインターフェイス言語",
     "settings.lang.auto": "システム設定を使用",

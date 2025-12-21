@@ -38,7 +38,10 @@ from qfluentwidgets import (
     MenuAnimationType
 )
 
-from src.gui.config import tr
+from src.gui.config import tr, cfg
+from qfluentwidgets import Theme
+import darkdetect
+from pathlib import Path
 
 
 class DraggableTreeWidget(TreeWidget):
@@ -131,6 +134,8 @@ class LayerPanel(QWidget):
         self._old_rename_key: Optional[str] = None
 
         self._init_ui()
+        self.setQss()
+        cfg.themeChanged.connect(self.setQss)
 
     def _init_ui(self) -> None:
         """Initialize the UI components."""
@@ -146,6 +151,7 @@ class LayerPanel(QWidget):
 
         # Tree widget for layers
         self._tree = DraggableTreeWidget(self)
+        self._tree.setObjectName("LayerTree")
         self._tree.setHeaderLabels([tr("layer_panel.title")])
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(False)
@@ -410,3 +416,16 @@ class LayerPanel(QWidget):
         """Remove all layers."""
         for name in list(self._layers.keys()):
             self.remove_layer(name)
+
+    def setQss(self):
+        """Apply QSS."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            theme_name = "dark" if darkdetect.isDark() else "light"
+        else:
+            theme_name = theme.value.lower()
+            
+        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "layer_panel.qss"
+        if qss_path.exists():
+            with open(qss_path, encoding='utf-8') as f:
+                self.setStyleSheet(f.read())

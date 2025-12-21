@@ -16,6 +16,9 @@ from PySide6.QtWidgets import (
 
 from src.gui.components.map_component import MapComponent
 from src.gui.components.property_panel import PropertyPanel
+from src.gui.config import cfg
+from qfluentwidgets import Theme
+from pathlib import Path
 
 class PageGroup(QGroupBox):
     """
@@ -24,21 +27,7 @@ class PageGroup(QGroupBox):
 
     def __init__(self, title: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(title, parent)
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #c0c0c0;
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top center;
-                padding: 0 5px;
-                color: #505050;
-            }
-        """)
+        self.setObjectName("PageGroup")
 
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(8, 16, 8, 8)
@@ -76,14 +65,16 @@ class BaseInterface(QWidget):
         self.tool_bar.setObjectName("ToolBar")
         self.tool_bar.setMinimumHeight(80)
         self.tool_bar.setMaximumHeight(120)
-        # Add a bottom border style
-        self.tool_bar.setStyleSheet("#ToolBar { background-color: #f9f9f9; border-bottom: 1px solid #e0e0e0; }")
         
         self._tool_layout = QHBoxLayout(self.tool_bar)
         self._tool_layout.setContentsMargins(4, 4, 4, 4)
         self._tool_layout.setSpacing(8)
         
         self._main_layout.addWidget(self.tool_bar)
+        
+        # Load theme styles
+        self.setQss()
+        cfg.themeChanged.connect(self.setQss)
 
         # 2. Content Area (Center)
         self.content_area = QWidget()
@@ -101,6 +92,20 @@ class BaseInterface(QWidget):
     def add_stretch(self) -> None:
         """Add stretch at the end of tool bar."""
         self._tool_layout.addStretch()
+
+    def setQss(self):
+        """Apply QSS."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            import darkdetect
+            theme_name = "dark" if darkdetect.isDark() else "light"
+        else:
+            theme_name = theme.value.lower()
+            
+        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "base_interface.qss"
+        if qss_path.exists():
+            with open(qss_path, encoding='utf-8') as f:
+                self.setStyleSheet(f.read())
 
 class MapInterface(BaseInterface):
     """

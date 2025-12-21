@@ -30,8 +30,23 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from loguru import logger
-
 from src.gui.config import tr
+from qfluentwidgets import (
+    ComboBox,
+    SpinBox,
+    DoubleSpinBox,
+    LineEdit,
+    CheckBox,
+    BodyLabel,
+    BodyLabel,
+    StrongBodyLabel,
+    SubtitleLabel,
+    ScrollArea,
+    Theme
+)
+from src.gui.config import cfg
+from pathlib import Path
+import darkdetect
 
 
 class PropertyGroup(QGroupBox):
@@ -55,23 +70,6 @@ class PropertyGroup(QGroupBox):
         self._layout.setContentsMargins(8, 16, 8, 8)
         self._layout.setSpacing(6)
 
-        # Style
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #e0e0e0;
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px;
-                color: #505050;
-            }
-        """)
-
     def add_row(self, label: str, widget: QWidget) -> None:
         """Add a row with label and widget."""
         self._layout.addRow(label, widget)
@@ -86,58 +84,52 @@ class SubplotPropertyPanel(QWidget):
 
     def _init_ui(self) -> None:
         """Initialize the UI."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(8)
+        self.layout.setContentsMargins(14, 16, 14, 14)
+        self.layout.setAlignment(Qt.AlignTop)
 
         # Numbering Rules Group
-        numbering_group = PropertyGroup(tr("prop.group.numbering"))
+        self.layout.addWidget(StrongBodyLabel(tr("prop.group.numbering")))
+        self.layout.addSpacing(4)
 
-        self.combo_numbering = QComboBox()
+        self.layout.addWidget(BodyLabel(tr("prop.label.numbering_mode")))
+        self.combo_numbering = ComboBox()
         self.combo_numbering.addItems([
             "行列命名 (R1C1, R1C2...)",
             "连续编号 (1, 2, 3...)",
             "蛇形编号",
             "自定义格式"
         ])
-        numbering_group.add_row(tr("prop.label.numbering_mode"), self.combo_numbering)
-
-        self.spin_start_row = QSpinBox()
+        self.layout.addWidget(self.combo_numbering)
+        
+        self.layout.addSpacing(4)
+        self.layout.addWidget(BodyLabel(tr("prop.label.start_row")))
+        self.spin_start_row = SpinBox()
         self.spin_start_row.setRange(0, 1000)
         self.spin_start_row.setValue(1)
-        numbering_group.add_row(tr("prop.label.start_row"), self.spin_start_row)
-
-        self.spin_start_col = QSpinBox()
+        self.layout.addWidget(self.spin_start_row)
+        
+        self.layout.addSpacing(4)
+        self.layout.addWidget(BodyLabel(tr("prop.label.start_col")))
+        self.spin_start_col = SpinBox()
         self.spin_start_col.setRange(0, 1000)
         self.spin_start_col.setValue(1)
-        numbering_group.add_row(tr("prop.label.start_col"), self.spin_start_col)
-
-        self.edit_prefix = QLineEdit()
+        self.layout.addWidget(self.spin_start_col)
+        
+        self.layout.addSpacing(4)
+        self.layout.addWidget(BodyLabel(tr("prop.label.prefix")))
+        self.edit_prefix = LineEdit()
         self.edit_prefix.setPlaceholderText("例如: Plot_")
-        numbering_group.add_row(tr("prop.label.prefix"), self.edit_prefix)
-
-        self.edit_suffix = QLineEdit()
+        self.layout.addWidget(self.edit_prefix)
+        
+        self.layout.addSpacing(4)
+        self.layout.addWidget(BodyLabel(tr("prop.label.suffix")))
+        self.edit_suffix = LineEdit()
         self.edit_suffix.setPlaceholderText("例如: _2024")
-        numbering_group.add_row(tr("prop.label.suffix"), self.edit_suffix)
+        self.layout.addWidget(self.edit_suffix)
 
-        layout.addWidget(numbering_group)
-
-        # Rotation Group
-        rotation_group = PropertyGroup(tr("prop.group.rotation"))
-
-        self.spin_rotation = QDoubleSpinBox()
-        self.spin_rotation.setRange(-180, 180)
-        self.spin_rotation.setValue(0)
-        self.spin_rotation.setSuffix("°")
-        rotation_group.add_row(tr("prop.label.rotation"), self.spin_rotation)
-
-        self.check_auto_rotate = QCheckBox(tr("prop.check.auto_rotate"))
-        self.check_auto_rotate.setChecked(True)
-        rotation_group.add_row("", self.check_auto_rotate)
-
-        layout.addWidget(rotation_group)
-
-        # Add stretch
-        layout.addStretch()
+        self.layout.addSpacing(12)
 
 
 class SeedlingPropertyPanel(QWidget):
@@ -368,7 +360,10 @@ class PropertyPanel(QWidget):
             Parent widget.
         """
         super().__init__(parent)
+        self.setObjectName("PropertyPanel")
         self._init_ui()
+        self.setQss()
+        cfg.themeChanged.connect(self.setQss)
 
     def _init_ui(self) -> None:
         """Initialize the UI."""
@@ -376,15 +371,20 @@ class PropertyPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         # Header
-        header_label = QLabel(tr("prop.title"))
-        header_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        header_label = SubtitleLabel(tr("prop.title"))
+        header_label.setObjectName("PropertyTitle")
         layout.addWidget(header_label)
 
         # Scroll area for content
-        scroll_area = QScrollArea()
+        scroll_area = ScrollArea()
+        scroll_area.setObjectName("PropertyScroll")
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        # Make transparent
+        scroll_area.setStyleSheet("background-color: transparent; border: none;")
+        scroll_area.viewport().setStyleSheet("background-color: transparent;")
 
         # Stacked widget for different tab contents
         self._content_stack = QStackedWidget()
@@ -444,3 +444,16 @@ class PropertyPanel(QWidget):
     def get_annotate_panel(self) -> AnnotatePropertyPanel:
         """Get the annotate property panel."""
         return self._annotate_panel
+
+    def setQss(self):
+        """Apply QSS."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            theme_name = "dark" if darkdetect.isDark() else "light"
+        else:
+            theme_name = theme.value.lower()
+            
+        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "property_panel.qss"
+        if qss_path.exists():
+            with open(qss_path, encoding='utf-8') as f:
+                self.setStyleSheet(f.read())

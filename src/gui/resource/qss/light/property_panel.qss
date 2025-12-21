@@ -1,0 +1,19 @@
+
+#PropertyPanel {
+    background-color: transparent;
+    border-left: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    margin-top: 12px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
+    color: black;
+}

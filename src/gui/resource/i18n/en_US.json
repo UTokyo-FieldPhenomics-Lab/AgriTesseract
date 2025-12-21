@@ -114,7 +114,7 @@
     "settings.desc.theme": "Application appearance",
     "settings.theme.auto": "Use System Setting",
     "settings.theme.light": "Light",
-    "settings.theme.dark": "Dark(Todo)",
+    "settings.theme.dark": "Dark",
     "settings.label.language": "Language",
     "settings.desc.language": "User Interface Language",
     "settings.lang.auto": "Use System Setting",

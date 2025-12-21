@@ -1,0 +1,41 @@
+
+#PropertyPanel {
+    background-color: transparent;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#PropertyTitle {
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+#PropertyScroll {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea {
+    background-color: transparent;
+}
+
+QWidget#scrollWidget {
+    background-color: transparent;
+}
+
+/* Group Box Styles */
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    margin-top: 12px;
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 5px;
+    color: white;
+}
