@@ -13,11 +13,11 @@ from qfluentwidgets import (
     SpinBox,
 )
 
-from src.gui.components.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import TabInterface, PageGroup
 from src.gui.config import tr
 
 
-class RenameTab(MapInterface):
+class RenameTab(TabInterface):
     """
     Interface content for Seedling ID Renaming.
     """

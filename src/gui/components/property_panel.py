@@ -48,36 +48,152 @@ from qfluentwidgets import (
     Theme,
     PrimaryPushButton,
     PushButton,
-    Pivot
+    Pivot,
+    InfoBadge
 )
 from src.gui.config import cfg
 from pathlib import Path
 import darkdetect
 
 
+class PropBase(QWidget):
+    """Base class for property widgets with a label and a control."""
+    
+    def __init__(self, title: str, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(4)
+        
+        self.label = BodyLabel(title)
+        self.layout.addWidget(self.label)
+        
+    def add_widget(self, widget: QWidget):
+        self.layout.addWidget(widget)
+
+
+class PropComboBox(PropBase):
+    """Property widget with a ComboBox."""
+    
+    currentIndexChanged = Signal(int)
+    
+    def __init__(self, title: str, items: list[str] = None, parent: Optional[QWidget] = None) -> None:
+        super().__init__(title, parent)
+        self.combo = ComboBox()
+        if items:
+            self.combo.addItems(items)
+        self.combo.currentIndexChanged.connect(self.currentIndexChanged)
+        self.add_widget(self.combo)
+        
+    def setCurrentIndex(self, index: int):
+        self.combo.setCurrentIndex(index)
+        
+    def currentIndex(self) -> int:
+        return self.combo.currentIndex()
+        
+    def addItems(self, items: list[str]):
+        self.combo.addItems(items)
+
+
+class PropSpinBox(PropBase):
+    """Property widget with a SpinBox."""
+    
+    valueChanged = Signal(int)
+    
+    def __init__(self, title: str, range: tuple[int, int] = (0, 100), value: int = 0, parent: Optional[QWidget] = None) -> None:
+        super().__init__(title, parent)
+        self.spin = SpinBox()
+        self.spin.setRange(*range)
+        self.spin.setValue(value)
+        self.spin.valueChanged.connect(self.valueChanged)
+        self.add_widget(self.spin)
+        
+    def setValue(self, value: int):
+        self.spin.setValue(value)
+        
+    def value(self) -> int:
+        return self.spin.value()
+
+
+class PropDoubleSpinBox(PropBase):
+    """Property widget with a DoubleSpinBox."""
+    
+    valueChanged = Signal(float)
+    
+    def __init__(self, title: str, range: tuple[float, float] = (0.0, 100.0), value: float = 0.0, suffix: str = "", parent: Optional[QWidget] = None) -> None:
+        super().__init__(title, parent)
+        self.spin = DoubleSpinBox()
+        self.spin.setRange(*range)
+        self.spin.setValue(value)
+        if suffix:
+            self.spin.setSuffix(suffix)
+        self.spin.valueChanged.connect(self.valueChanged)
+        self.add_widget(self.spin)
+        
+    def setValue(self, value: float):
+        self.spin.setValue(value)
+        
+    def value(self) -> float:
+        return self.spin.value()
+
+
+class PropLineEdit(PropBase):
+    """Property widget with a LineEdit."""
+    
+    textChanged = Signal(str)
+    
+    def __init__(self, title: str, placeholder: str = "", parent: Optional[QWidget] = None) -> None:
+        super().__init__(title, parent)
+        self.edit = LineEdit()
+        if placeholder:
+            self.edit.setPlaceholderText(placeholder)
+        self.edit.textChanged.connect(self.textChanged)
+        self.add_widget(self.edit)
+        
+    def text(self) -> str:
+        return self.edit.text()
+    
+    def setText(self, text: str):
+        self.edit.setText(text)
+
+
+class PropInfo(PropBase):
+    """Property widget with an InfoBadge."""
+    
+    def __init__(self, title: str, value: str = "", badge_type='info', parent: Optional[QWidget] = None) -> None:
+        super().__init__(title, parent)
+        # InfoBadge in qfluentwidgets usually takes just parent. 
+        # Using a custom wrapper or just BodyLabel/InfoBadge if available.
+        # Assuming InfoBadge exists and works like a label or small indicator.
+        # If InfoBadge is not suitable for generic text, we might use BodyLabel with styling.
+        self.badge = InfoBadge.info(value)
+        # badge_type: info, success, warning, error, attribution
+        # Adjust method based on type if needed, but 'info' static method is common pattern in Fluent?
+        # Actually InfoBadge init is InfoBadge(text, parent, type).
+        # We will assume generic usage.
+        
+        # Re-creating simple badge logic if InfoBadge static methods differ
+        # Using standard instantiation
+        self.badge = InfoBadge(text=value)
+        self.layout.addWidget(self.badge) # add_widget wrapper
+        
+    def setText(self, text: str):
+        self.badge.setText(text)
+
+
 class PropertyGroup(QGroupBox):
     """
     A collapsible group of properties.
-
-    Parameters
-    ----------
-    title : str
-        Title of the group.
-    parent : QWidget, optional
-        Parent widget.
     """
-
     def __init__(self, title: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(title, parent)
         self.setCheckable(True)
         self.setChecked(True)
-
         self._layout = QFormLayout(self)
         self._layout.setContentsMargins(8, 16, 8, 8)
         self._layout.setSpacing(6)
 
     def add_row(self, label: str, widget: QWidget) -> None:
-        """Add a row with label and widget."""
         self._layout.addRow(label, widget)
 
 
@@ -94,10 +210,34 @@ class SubplotPropertyPanel(QWidget):
         self._connect_signals()
 
     def _init_ui(self) -> None:
-        """Initialize the UI."""
+        """
+        Initialize the UI.
+        
+        Layout Structure:
+        SubplotPropertyPanel (QVBoxLayout)
+        ├── pivot (Pivot)
+        ├── content_stack (QStackedWidget)
+        │   ├── stack_layout (QWidget, QVBoxLayout)
+        │   │   ├── prop_def_mode (PropComboBox)
+        │   │   ├── prop_cols (PropSpinBox) [Visible if mode=RC]
+        │   │   ├── prop_rows (PropSpinBox) [Visible if mode=RC]
+        │   │   ├── prop_width (PropDoubleSpinBox) [Visible if mode=Size]
+        │   │   ├── prop_height (PropDoubleSpinBox) [Visible if mode=Size]
+        │   │   ├── prop_x_spacing (PropDoubleSpinBox)
+        │   │   └── prop_y_spacing (PropDoubleSpinBox)
+        │   └── stack_numbering (QWidget, QVBoxLayout)
+        │       ├── prop_mode (PropComboBox)
+        │       ├── prop_start_row (PropSpinBox)
+        │       ├── prop_start_col (PropSpinBox)
+        │       ├── prop_prefix (PropLineEdit)
+        │       └── prop_suffix (PropLineEdit)
+        └── action_layout (QHBoxLayout)
+            ├── btn_reset (PushButton)
+            └── btn_generate (PrimaryPushButton)
+        """
         self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(16)
-        self.layout.setContentsMargins(14, 16, 14, 14)
+        self.layout.setSpacing(8)
+        self.layout.setContentsMargins(8, 8, 8, 8)
         self.layout.setAlignment(Qt.AlignTop)
 
         # --- Pivot Navigation ---
@@ -109,165 +249,138 @@ class SubplotPropertyPanel(QWidget):
         self.layout.addWidget(self.content_stack)
 
         # ==========================================
-        # Page 1: Layout Settings
+        # Stack 1: Layout Settings
         # ==========================================
-        self.page_layout = QWidget()
-        layout_page_layout = QVBoxLayout(self.page_layout)
-        layout_page_layout.setContentsMargins(0, 0, 0, 0)
-        layout_page_layout.setSpacing(16)
-        layout_page_layout.setAlignment(Qt.AlignTop)
-
         # --- Layout Group Content (Def Mode, Dim, Spacing) ---
-        self.def_mode_group = QWidget()
-        layout_def_mode = QVBoxLayout(self.def_mode_group)
-        layout_def_mode.setContentsMargins(0, 0, 0, 0)
-        layout_def_mode.setSpacing(8)
+        self.stack_layout = QWidget()
 
-        self.lbl_def_mode = BodyLabel(tr("page.subplot.label.def_mode"))
-        layout_def_mode.addWidget(self.lbl_def_mode)
+        stack_layout_inner = QVBoxLayout(self.stack_layout)
+        stack_layout_inner.setContentsMargins(0, 0, 0, 0)
+        stack_layout_inner.setSpacing(16)
+        stack_layout_inner.setAlignment(Qt.AlignTop)
 
-        self.combo_def_mode = ComboBox()
-        self.combo_def_mode.addItems([tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")])
+        # --- Def Mode Group ---
 
-        layout_def_mode.addWidget(self.combo_def_mode)
-
-        layout_page_layout.addWidget(self.def_mode_group)
+        self.prop_def_mode = PropComboBox(
+            title=tr("page.subplot.label.def_mode"), 
+            items=[
+                tr("page.subplot.combo.rc"), 
+                tr("page.subplot.combo.size")
+            ]
+        )
+        # Map internal widget
+        self.combo_def_mode = self.prop_def_mode.combo
+        stack_layout_inner.addWidget(self.prop_def_mode)
 
         # --- Dimensions Group ---
-        # We use a Stacked Widget to switch between Row/Col and Width/Height inputs
-        self.dim_stack = QStackedWidget()
+        # Rows / Cols
+        self.prop_cols = PropSpinBox(
+            title=tr("page.subplot.label.cols"), 
+            range=(1, 100), 
+            value=5
+        )
+        self.spin_cols = self.prop_cols.spin
+        stack_layout_inner.addWidget(self.prop_cols)
         
-        # Page 1: Rows / Cols
-        self.dim_page_rc = QWidget() # Rename to avoid conflict
-        layout_rc = QVBoxLayout(self.dim_page_rc)
-        layout_rc.setContentsMargins(0, 0, 0, 0)
-        layout_rc.setSpacing(8)
-        
-        # Cols (Width count)
-        self.lbl_cols = BodyLabel(tr("page.subplot.label.cols"))
-        layout_rc.addWidget(self.lbl_cols)
-        self.spin_cols = SpinBox()
-        self.spin_cols.setRange(1, 100)
-        self.spin_cols.setValue(5)
-        layout_rc.addWidget(self.spin_cols)
-        
-        # Rows (Height count)
-        self.lbl_rows = BodyLabel(tr("page.subplot.label.rows"))
-        layout_rc.addWidget(self.lbl_rows)
-        self.spin_rows = SpinBox()
-        self.spin_rows.setRange(1, 100)
-        self.spin_rows.setValue(5)
-        layout_rc.addWidget(self.spin_rows)
-        
-        self.dim_stack.addWidget(self.dim_page_rc)
+        self.prop_rows = PropSpinBox(
+            title=tr("page.subplot.label.rows"), 
+            range=(1, 100), 
+            value=5
+        )
+        self.spin_rows = self.prop_rows.spin
+        stack_layout_inner.addWidget(self.prop_rows)
 
-        # Page 2: Width / Height (Size in meters)
-        self.dim_page_size = QWidget() # Rename
-        layout_size = QVBoxLayout(self.dim_page_size)
-        layout_size.setContentsMargins(0, 0, 0, 0)
-        layout_size.setSpacing(8)
+        # Width / Height (Size in meters)
+        self.prop_width = PropDoubleSpinBox(
+            title=tr("page.subplot.label.width_m"), 
+            range=(0.1, 1000.0), 
+            value=2.0, 
+            suffix=" m"
+        )
+        self.spin_width = self.prop_width.spin
+        stack_layout_inner.addWidget(self.prop_width)
         
-        # Width
-        self.lbl_width = BodyLabel(tr("page.subplot.label.width_m"))
-        layout_size.addWidget(self.lbl_width)
-        self.spin_width = DoubleSpinBox()
-        self.spin_width.setRange(0.1, 1000.0)
-        self.spin_width.setValue(2.0)
-        self.spin_width.setSuffix(" m")
-        layout_size.addWidget(self.spin_width)
+        self.prop_height = PropDoubleSpinBox(
+            title=tr("page.subplot.label.height_m"), 
+            range=(0.1, 1000.0), 
+            value=2.0, 
+            suffix=" m"
+        )
+        self.spin_height = self.prop_height.spin
+        stack_layout_inner.addWidget(self.prop_height)
         
-        # Height
-        self.lbl_height = BodyLabel(tr("page.subplot.label.height_m"))
-        layout_size.addWidget(self.lbl_height)
-        self.spin_height = DoubleSpinBox()
-        self.spin_height.setRange(0.1, 1000.0)
-        self.spin_height.setValue(2.0)
-        self.spin_height.setSuffix(" m")
-        layout_size.addWidget(self.spin_height)
-        
-        self.dim_stack.addWidget(self.dim_page_size)
-        
-        layout_page_layout.addWidget(self.dim_stack)
+        # Initial visibility state
+        self.prop_width.hide()
+        self.prop_height.hide()
 
         # X Spacing
-        layout_page_layout.addWidget(BodyLabel(tr("page.subplot.label.x_space")))
-        self.spin_x_spacing = DoubleSpinBox()
-        self.spin_x_spacing.setRange(-10, 100)
-        self.spin_x_spacing.setValue(0.0)
-        self.spin_x_spacing.setSuffix(" m")
-        layout_page_layout.addWidget(self.spin_x_spacing)
+        self.prop_x_spacing = PropDoubleSpinBox(
+            title=tr("page.subplot.label.x_space"), 
+            range=(-10, 100), 
+            value=0.0, 
+            suffix=" m"
+        )
+        self.spin_x_spacing = self.prop_x_spacing.spin
+        stack_layout_inner.addWidget(self.prop_x_spacing)
 
         # Y Spacing
-        layout_page_layout.addWidget(BodyLabel(tr("page.subplot.label.y_space")))
-        self.spin_y_spacing = DoubleSpinBox()
-        self.spin_y_spacing.setRange(-10, 100)
-        self.spin_y_spacing.setValue(0.0)
-        self.spin_y_spacing.setSuffix(" m")
-        layout_page_layout.addWidget(self.spin_y_spacing)
-        
-        # Add Stretch to page layout
-        layout_page_layout.addStretch()
+        self.prop_y_spacing = PropDoubleSpinBox(
+            title=tr("page.subplot.label.y_space"), 
+            range=(-10, 100), 
+            value=0.0, 
+            suffix=" m"
+        )
+        self.spin_y_spacing = self.prop_y_spacing.spin
+        stack_layout_inner.addWidget(self.prop_y_spacing)
 
-        # Add page to main content stack
-        self.content_stack.addWidget(self.page_layout)
+        self.content_stack.addWidget(self.stack_layout)
 
         # ==========================================
-        # Page 2: Numbering Rules
+        # Stack 2: Numbering Rules
         # ==========================================
-        self.page_numbering = QWidget()
-        layout_numbering = QVBoxLayout(self.page_numbering)
-        layout_numbering.setContentsMargins(0, 0, 0, 0)
-        layout_numbering.setSpacing(8)
-        layout_numbering.setAlignment(Qt.AlignTop)
+        self.stack_numbering = QWidget()
+        stack_numbering_inner = QVBoxLayout(self.stack_numbering)
+        stack_numbering_inner.setContentsMargins(0, 0, 0, 0)
+        stack_numbering_inner.setSpacing(16)
+        stack_numbering_inner.setAlignment(Qt.AlignTop)
 
-        layout_numbering.addWidget(BodyLabel(tr("prop.label.numbering_mode")))
-        self.combo_numbering = ComboBox()
-        self.combo_numbering.addItems([
-            "行列命名 (R1C1, R1C2...)",
-            "连续编号 (1, 2, 3...)",
-            "蛇形编号",
-            "自定义格式"
-        ])
-        layout_numbering.addWidget(self.combo_numbering)
+        self.prop_mode = PropComboBox(
+            title=tr("prop.label.numbering_mode"), 
+            items=[
+                "行列命名 (R1C1, R1C2...)",
+                "连续编号 (1, 2, 3...)",
+                "蛇形编号",
+                "自定义格式"
+            ]
+        )
+        self.combo_numbering = self.prop_mode.combo
+        stack_numbering_inner.addWidget(self.prop_mode)
         
-        layout_numbering.addWidget(BodyLabel(tr("prop.label.start_row")))
-        self.spin_start_row = SpinBox()
-        self.spin_start_row.setRange(0, 1000)
-        self.spin_start_row.setValue(1)
-        layout_numbering.addWidget(self.spin_start_row)
+        self.prop_start_row = PropSpinBox(tr("prop.label.start_row"), (0, 1000), 1)
+        self.spin_start_row = self.prop_start_row.spin
+        stack_numbering_inner.addWidget(self.prop_start_row)
         
-        layout_numbering.addWidget(BodyLabel(tr("prop.label.start_col")))
-        self.spin_start_col = SpinBox()
-        self.spin_start_col.setRange(0, 1000)
-        self.spin_start_col.setValue(1)
-        layout_numbering.addWidget(self.spin_start_col)
+        self.prop_start_col = PropSpinBox(tr("prop.label.start_col"), (0, 1000), 1)
+        self.spin_start_col = self.prop_start_col.spin
+        stack_numbering_inner.addWidget(self.prop_start_col)
         
-        layout_numbering.addWidget(BodyLabel(tr("prop.label.prefix")))
-        self.edit_prefix = LineEdit()
-        self.edit_prefix.setPlaceholderText("例如: Plot_")
-        layout_numbering.addWidget(self.edit_prefix)
+        self.prop_prefix = PropLineEdit(tr("prop.label.prefix"), "例如: Plot_")
+        self.edit_prefix = self.prop_prefix.edit
+        stack_numbering_inner.addWidget(self.prop_prefix)
         
-        layout_numbering.addWidget(BodyLabel(tr("prop.label.suffix")))
-        self.edit_suffix = LineEdit()
-        self.edit_suffix.setPlaceholderText("例如: _2024")
-        layout_numbering.addWidget(self.edit_suffix)
-
-        layout_numbering.addStretch()
-
-        self.content_stack.addWidget(self.page_numbering)
+        self.prop_suffix = PropLineEdit(tr("prop.label.suffix"), "例如: _2024")
+        self.edit_suffix = self.prop_suffix.edit
+        stack_numbering_inner.addWidget(self.prop_suffix)
+        
+        self.content_stack.addWidget(self.stack_numbering)
 
         # --- Setup Pivot ---
         self.pivot.addItem(routeKey="layout", text=tr("page.subplot.group.layout"))
         self.pivot.addItem(routeKey="numbering", text=tr("prop.group.numbering"))
         self.pivot.currentItemChanged.connect(lambda k: self.content_stack.setCurrentIndex(0 if k == "layout" else 1))
         self.pivot.setCurrentItem("layout")
-        
-        # --- Reset Layout Stretch ---
-        # The main layout stretch is now handled by content_stack pages having stretches
-        # But we remove the old addStretch() call below
 
         # --- Action Buttons ---
-
         action_layout = QHBoxLayout()
         action_layout.setSpacing(8)
         
@@ -295,8 +408,12 @@ class SubplotPropertyPanel(QWidget):
         self.combo_def_mode.currentIndexChanged.connect(self.sigParamChanged)
 
     def _on_mode_changed(self, index: int):
-        """Switch input stack based on mode."""
-        self.dim_stack.setCurrentIndex(index)
+        """Switch input visibility based on mode."""
+        is_rc = (index == 0)
+        self.prop_cols.setVisible(is_rc)
+        self.prop_rows.setVisible(is_rc)
+        self.prop_width.setVisible(not is_rc)
+        self.prop_height.setVisible(not is_rc)
         # Update labels if needed or handled by stack visibility
 
 

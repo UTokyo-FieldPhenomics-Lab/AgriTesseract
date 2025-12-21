@@ -14,11 +14,11 @@ from qfluentwidgets import (
     DoubleSpinBox,
 )
 
-from src.gui.components.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import TabInterface, PageGroup
 from src.gui.config import tr
 
 
-class TimeSeriesTab(MapInterface):
+class TimeSeriesTab(TabInterface):
     """
     Interface content for Time Series Cropping.
     """

@@ -107,7 +107,7 @@ class BaseInterface(QWidget):
             with open(qss_path, encoding='utf-8') as f:
                 self.setStyleSheet(f.read())
 
-class MapInterface(BaseInterface):
+class TabInterface(BaseInterface):
     """
     Base Interface for GIS functionality.
     Layout:

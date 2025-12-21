@@ -28,12 +28,12 @@ from pathlib import Path
 from loguru import logger
 from pathlib import Path
 
-from src.gui.components.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import TabInterface, PageGroup
 from src.gui.config import tr
 from src.core.subplot_generator import SubplotGenerator
 
 
-class SubplotTab(MapInterface):
+class SubplotTab(TabInterface):
     """
     Interface content for Subplot Generation.
     """

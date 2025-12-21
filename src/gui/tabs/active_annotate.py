@@ -12,11 +12,11 @@ from qfluentwidgets import (
     PrimaryPushButton,
 )
 
-from src.gui.components.base_interface import MapInterface, PageGroup
+from src.gui.components.base_interface import TabInterface, PageGroup
 from src.gui.config import tr
 
 
-class ActiveAnnotateTab(MapInterface):
+class ActiveAnnotateTab(TabInterface):
     """
     Interface content for Annotation Training.
     """
