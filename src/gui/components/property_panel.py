@@ -371,7 +371,7 @@ class PropertyPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         # Header
-        header_label = SubtitleLabel(tr("prop.title"))
+        header_label = QLabel(tr("prop.title"))
         header_label.setObjectName("PropertyTitle")
         layout.addWidget(header_label)
 

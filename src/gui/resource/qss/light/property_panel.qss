@@ -4,6 +4,24 @@
     border-left: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+#PropertyTitle {
+    color: black;
+}
+
+#PropertyScroll {
+    background-color: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+}
+
+QScrollArea {
+    background-color: transparent;
+}
+
+QWidget#scrollWidget {
+    background-color: transparent;
+}
+
 QGroupBox {
     font-weight: bold;
     border: 1px solid rgba(0, 0, 0, 0.06);
