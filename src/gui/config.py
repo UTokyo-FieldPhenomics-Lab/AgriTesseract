@@ -45,6 +45,11 @@ class Config(QConfig):
     modelDir = ConfigItem(
         "Model", "ModelDir", "", FolderValidator()
     )
+    
+    # Mica Effect
+    micaEnabled = ConfigItem(
+        "Personalization", "MicaEnabled", True, validator=None, restart=False
+    )
 
 
 class Translator(QObject):

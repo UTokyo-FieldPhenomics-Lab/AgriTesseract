@@ -4,14 +4,18 @@ from typing import Optional
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
+from PySide6.QtCore import QTimer
+
 from loguru import logger
+
 from qfluentwidgets import (
     FluentWindow, 
     NavigationItemPosition, 
     FluentIcon as FIF,
     SplashScreen,
     setTheme,
-    Theme
+    Theme,
+    isDarkTheme
 )
 
 from src.gui.config import cfg, tr
@@ -91,10 +95,17 @@ class MainWindow(FluentWindow):
         w, h = desktop.width(), desktop.height()
         self.move(w//2 - self.width()//2, h//2 - self.height()//2)
 
-        # set the minimum window width that allows the navigation panel to be expanded
         self.navigationInterface.setMinimumExpandWidth(600)
         self.navigationInterface.setExpandWidth(200)
         # self.navigationInterface.expand(useAni=False)
+
+        self.setMicaEffectEnabled(cfg.get(cfg.micaEnabled))
+
+    def _onThemeChangedFinished(self):
+        super()._onThemeChangedFinished()
+        # retry
+        if self.isMicaEffectEnabled():
+            QTimer.singleShot(100, lambda: self.windowEffect.setMicaEffect(self.winId(), isDarkTheme()))
 
     def closeEvent(self, event):
         logger.info("MainWindow closing")

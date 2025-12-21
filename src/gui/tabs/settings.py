@@ -38,10 +38,13 @@ class SettingsTab(ScrollArea):
 
     def _init_ui(self):
         """Initialize UI controls."""
+        self.setViewportMargins(0, 80, 0, 20)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
         # --- Settings Header ---
         self.settingLabel = QLabel(tr("nav.settings"), self)
         self.settingLabel.setObjectName('settingLabel')
+        self.settingLabel.move(36, 30)
         
         # --- General Group ---
         self.generalGroup = SettingCardGroup(tr("settings.group.general"), self.scrollWidget)
@@ -93,10 +96,12 @@ class SettingsTab(ScrollArea):
 
         # --- Add Groups to Layout ---
         self.expandLayout.setSpacing(28)
-        self.expandLayout.setContentsMargins(60, 60, 60, 60)
-        self.expandLayout.addWidget(self.settingLabel)
+        self.expandLayout.setContentsMargins(36, 10, 36, 0)
         self.expandLayout.addWidget(self.generalGroup)
         self.expandLayout.addWidget(self.modelGroup)
+        
+        self.scrollWidget.setObjectName('scrollWidget')
+        self.setQss()
 
     def _load_settings(self):
         """Load settings (handled by QConfig binding automatically for some widgets, but some manual sync needed)."""
@@ -110,6 +115,7 @@ class SettingsTab(ScrollArea):
         """Connect signals."""
         self.modelDirCard.clicked.connect(self._browse_model_dir)
         cfg.themeChanged.connect(self.setQss)
+        cfg.themeChanged.connect(setTheme)
         cfg.language.valueChanged.connect(self.setLanguage)
 
     def _browse_model_dir(self):
