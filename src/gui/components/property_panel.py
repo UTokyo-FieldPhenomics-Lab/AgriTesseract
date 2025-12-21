@@ -42,7 +42,9 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     ScrollArea,
-    Theme
+    Theme,
+    PrimaryPushButton,
+    PushButton
 )
 from src.gui.config import cfg
 from pathlib import Path
@@ -77,21 +79,117 @@ class PropertyGroup(QGroupBox):
 
 class SubplotPropertyPanel(QWidget):
     """Property panel content for Subplot Generation tab."""
+    
+    sigParamChanged = Signal()
+    sigGenerate = Signal()
+    sigReset = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._init_ui()
+        self._connect_signals()
 
     def _init_ui(self) -> None:
         """Initialize the UI."""
         self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(8)
+        self.layout.setSpacing(16)
         self.layout.setContentsMargins(14, 16, 14, 14)
         self.layout.setAlignment(Qt.AlignTop)
 
-        # Numbering Rules Group
+        # --- Layout Group ---
+        self.layout.addWidget(StrongBodyLabel(tr("page.subplot.group.layout")))
+
+        self.def_mode_group = QWidget()
+        layout_def_mode = QVBoxLayout(self.def_mode_group)
+        layout_def_mode.setContentsMargins(0, 0, 0, 0)
+        layout_def_mode.setSpacing(8)
+
+        self.lbl_def_mode = BodyLabel(tr("page.subplot.label.def_mode"))
+        layout_def_mode.addWidget(self.lbl_def_mode)
+        
+        self.combo_def_mode = ComboBox()
+        self.combo_def_mode.addItems([tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")])
+
+        layout_def_mode.addWidget(self.combo_def_mode)
+
+        self.layout.addWidget(self.def_mode_group)
+
+        # --- Dimensions Group ---
+        # We use a Stacked Widget to switch between Row/Col and Width/Height inputs
+        self.dim_stack = QStackedWidget()
+        
+        # Page 1: Rows / Cols
+        self.page_rc = QWidget()
+        layout_rc = QVBoxLayout(self.page_rc)
+        layout_rc.setContentsMargins(0, 0, 0, 0)
+        layout_rc.setSpacing(8)
+        
+        # Cols (Width count)
+        self.lbl_cols = BodyLabel(tr("page.subplot.label.cols"))
+        layout_rc.addWidget(self.lbl_cols)
+        self.spin_cols = SpinBox()
+        self.spin_cols.setRange(1, 100)
+        self.spin_cols.setValue(5)
+        layout_rc.addWidget(self.spin_cols)
+        
+        # Rows (Height count)
+        self.lbl_rows = BodyLabel(tr("page.subplot.label.rows"))
+        layout_rc.addWidget(self.lbl_rows)
+        self.spin_rows = SpinBox()
+        self.spin_rows.setRange(1, 100)
+        self.spin_rows.setValue(5)
+        layout_rc.addWidget(self.spin_rows)
+        
+        self.dim_stack.addWidget(self.page_rc)
+
+        # Page 2: Width / Height (Size in meters)
+        self.page_size = QWidget()
+        layout_size = QVBoxLayout(self.page_size)
+        layout_size.setContentsMargins(0, 0, 0, 0)
+        layout_size.setSpacing(8)
+        
+        # Width
+        self.lbl_width = BodyLabel(tr("page.subplot.label.width_m")) # Need to add this key or reuse "Width"
+        layout_size.addWidget(self.lbl_width)
+        self.spin_width = DoubleSpinBox()
+        self.spin_width.setRange(0.1, 1000.0)
+        self.spin_width.setValue(2.0)
+        self.spin_width.setSuffix(" m")
+        layout_size.addWidget(self.spin_width)
+        
+        # Height
+        self.lbl_height = BodyLabel(tr("page.subplot.label.height_m")) # Need to add key
+        layout_size.addWidget(self.lbl_height)
+        self.spin_height = DoubleSpinBox()
+        self.spin_height.setRange(0.1, 1000.0)
+        self.spin_height.setValue(2.0)
+        self.spin_height.setSuffix(" m")
+        layout_size.addWidget(self.spin_height)
+        
+        self.dim_stack.addWidget(self.page_size)
+        
+        self.layout.addWidget(self.dim_stack)
+        
+        # X Spacing
+        self.layout.addWidget(BodyLabel(tr("page.subplot.label.x_space")))
+        self.spin_x_spacing = DoubleSpinBox()
+        self.spin_x_spacing.setRange(-10, 100)
+        self.spin_x_spacing.setValue(0.0)
+        self.spin_x_spacing.setSuffix(" m")
+        self.layout.addWidget(self.spin_x_spacing)
+
+        # Y Spacing
+        self.layout.addWidget(BodyLabel(tr("page.subplot.label.y_space")))
+        self.spin_y_spacing = DoubleSpinBox()
+        self.spin_y_spacing.setRange(-10, 100)
+        self.spin_y_spacing.setValue(0.0)
+        self.spin_y_spacing.setSuffix(" m")
+        self.layout.addWidget(self.spin_y_spacing)
+        
+        self.layout.addSpacing(8)
+
+        # --- Numbering Rules Group ---
         self.layout.addWidget(StrongBodyLabel(tr("prop.group.numbering")))
-        self.layout.addSpacing(4)
 
         self.layout.addWidget(BodyLabel(tr("prop.label.numbering_mode")))
         self.combo_numbering = ComboBox()
@@ -103,33 +201,61 @@ class SubplotPropertyPanel(QWidget):
         ])
         self.layout.addWidget(self.combo_numbering)
         
-        self.layout.addSpacing(4)
         self.layout.addWidget(BodyLabel(tr("prop.label.start_row")))
         self.spin_start_row = SpinBox()
         self.spin_start_row.setRange(0, 1000)
         self.spin_start_row.setValue(1)
         self.layout.addWidget(self.spin_start_row)
         
-        self.layout.addSpacing(4)
         self.layout.addWidget(BodyLabel(tr("prop.label.start_col")))
         self.spin_start_col = SpinBox()
         self.spin_start_col.setRange(0, 1000)
         self.spin_start_col.setValue(1)
         self.layout.addWidget(self.spin_start_col)
         
-        self.layout.addSpacing(4)
         self.layout.addWidget(BodyLabel(tr("prop.label.prefix")))
         self.edit_prefix = LineEdit()
         self.edit_prefix.setPlaceholderText("例如: Plot_")
         self.layout.addWidget(self.edit_prefix)
         
-        self.layout.addSpacing(4)
         self.layout.addWidget(BodyLabel(tr("prop.label.suffix")))
         self.edit_suffix = LineEdit()
         self.edit_suffix.setPlaceholderText("例如: _2024")
         self.layout.addWidget(self.edit_suffix)
 
-        self.layout.addSpacing(12)
+        self.layout.addStretch()
+
+        # --- Action Buttons ---
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(8)
+        
+        self.btn_reset = PushButton(tr("btn.reset")) # Need key
+        self.btn_reset.clicked.connect(self.sigReset)
+        action_layout.addWidget(self.btn_reset)
+        
+        self.btn_generate = PrimaryPushButton(tr("page.subplot.btn.save"))
+        self.btn_generate.clicked.connect(self.sigGenerate)
+        action_layout.addWidget(self.btn_generate)
+        
+        self.layout.addLayout(action_layout)
+
+    def _connect_signals(self):
+        """Connect internal signals."""
+        self.combo_def_mode.currentIndexChanged.connect(self._on_mode_changed)
+        
+        # Param changed signals for auto-preview
+        self.spin_cols.valueChanged.connect(self.sigParamChanged)
+        self.spin_rows.valueChanged.connect(self.sigParamChanged)
+        self.spin_width.valueChanged.connect(self.sigParamChanged)
+        self.spin_height.valueChanged.connect(self.sigParamChanged)
+        self.spin_x_spacing.valueChanged.connect(self.sigParamChanged)
+        self.spin_y_spacing.valueChanged.connect(self.sigParamChanged)
+        self.combo_def_mode.currentIndexChanged.connect(self.sigParamChanged)
+
+    def _on_mode_changed(self, index: int):
+        """Switch input stack based on mode."""
+        self.dim_stack.setCurrentIndex(index)
+        # Update labels if needed or handled by stack visibility
 
 
 class SeedlingPropertyPanel(QWidget):

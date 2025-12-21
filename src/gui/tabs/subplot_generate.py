@@ -17,11 +17,13 @@ from qfluentwidgets import (
     DoubleSpinBox,
     CheckBox,
     InfoBar,
-    InfoBarPosition,
     BodyLabel,
     StrongBodyLabel,
     SubtitleLabel
 )
+
+from loguru import logger
+from pathlib import Path
 
 from loguru import logger
 from pathlib import Path
@@ -43,7 +45,7 @@ class SubplotTab(MapInterface):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self._init_controls()
+        self._init_ui()
 
     def _init_layout(self):
         super()._init_layout()
@@ -58,10 +60,9 @@ class SubplotTab(MapInterface):
         subplot_panel.spin_rotation.setValue(angle)
         subplot_panel.spin_rotation.blockSignals(False)
 
-    def _init_controls(self) -> None:
+    def _init_ui(self) -> None:
         """Initialize the controls for subplot generation."""
         # --- File Group ---
-        # TODO: Add i18n keys for group titles
         file_group = PageGroup(tr("page.subplot.group.file"))
 
         self.btn_load_image = PushButton(tr("page.subplot.btn.load_image"))
@@ -74,77 +75,26 @@ class SubplotTab(MapInterface):
 
         self.add_group(file_group)
 
-        # --- Definition Group ---
-        def_group = PageGroup(tr("page.subplot.group.def"))
-
-        self.combo_def_mode = ComboBox()
-        self.combo_def_mode.addItems([tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")])
-        self.combo_def_mode.currentIndexChanged.connect(self._on_mode_changed)
-        def_group.add_widget(self.combo_def_mode)
-
-        self.add_group(def_group)
-
-        # --- Parameters Group ---
-        param_group = PageGroup(tr("page.subplot.group.param"))
-
-        # Row/Col or Width/Height
-        self.lbl_cols = BodyLabel(tr("page.subplot.label.cols"))
-        param_group.add_widget(self.lbl_cols)
-        self.spin_cols = SpinBox()
-        self.spin_cols.setRange(1, 100)
-        self.spin_cols.setValue(5)
-        self.spin_cols.setMinimumWidth(60)
-        self.spin_cols.valueChanged.connect(self._auto_preview)
-        param_group.add_widget(self.spin_cols)
-
-        self.lbl_rows = BodyLabel(tr("page.subplot.label.rows"))
-        param_group.add_widget(self.lbl_rows)
-        self.spin_rows = SpinBox()
-        self.spin_rows.setRange(1, 100)
-        self.spin_rows.setValue(5)
-        self.spin_rows.setMinimumWidth(60)
-        self.spin_rows.valueChanged.connect(self._auto_preview)
-        param_group.add_widget(self.spin_rows)
-
-        param_group.add_widget(BodyLabel(tr("page.subplot.label.x_space")))
-        self.spin_x_spacing = DoubleSpinBox()
-        self.spin_x_spacing.setRange(-10, 100)
-        self.spin_x_spacing.setValue(0.0)
-        self.spin_x_spacing.setSuffix(" m")
-        self.spin_x_spacing.setMinimumWidth(70)
-        self.spin_x_spacing.valueChanged.connect(self._auto_preview)
-        param_group.add_widget(self.spin_x_spacing)
-
-        param_group.add_widget(BodyLabel(tr("page.subplot.label.y_space")))
-        self.spin_y_spacing = DoubleSpinBox()
-        self.spin_y_spacing.setRange(-10, 100)
-        self.spin_y_spacing.setValue(0.0)
-        self.spin_y_spacing.setSuffix(" m")
-        self.spin_y_spacing.setMinimumWidth(70)
-        self.spin_y_spacing.valueChanged.connect(self._auto_preview)
-        param_group.add_widget(self.spin_y_spacing)
-
-        self.add_group(param_group)
-
-        # --- Actions Group ---
-        action_group = PageGroup(tr("page.subplot.group.action"))
+        # --- View Group ---
+        view_group = PageGroup(tr("page.subplot.group.view")) # Reusing action key for View
 
         self.check_preview = CheckBox(tr("page.subplot.check.preview"))
         self.check_preview.setChecked(True)
         self.check_preview.stateChanged.connect(self._auto_preview)
-        action_group.add_widget(self.check_preview)
+        view_group.add_widget(self.check_preview)
 
         self.btn_focus = PushButton(tr("page.subplot.btn.focus"))
         self.btn_focus.clicked.connect(self._on_focus)
-        action_group.add_widget(self.btn_focus)
+        view_group.add_widget(self.btn_focus)
 
-        self.btn_generate = PrimaryPushButton(tr("page.subplot.btn.generate"))
-        self.btn_generate.clicked.connect(self._on_generate)
-        action_group.add_widget(self.btn_generate)
-
-        self.add_group(action_group)
-
+        self.add_group(view_group)
         self.add_stretch()
+        
+        # Connect Action Signals from Property Panel
+        panel = self.property_panel.get_subplot_panel()
+        panel.sigGenerate.connect(self._on_generate)
+        panel.sigReset.connect(self._on_reset)
+        panel.sigParamChanged.connect(self._auto_preview)
 
         # Init Generator
         self.generator = SubplotGenerator()
@@ -207,7 +157,7 @@ class SubplotTab(MapInterface):
     @Slot()
     def _on_mode_changed(self, index: int):
         """Handle definition mode change."""
-        pass  # TODO: Update UI labels based on mode (RC vs Size)
+        pass # Now handled in Property Panel
 
     @Slot()
     def _auto_preview(self):
@@ -216,14 +166,47 @@ class SubplotTab(MapInterface):
             return
         
         try:
-            rows = self.spin_rows.value()
-            cols = self.spin_cols.value()
-            x_space = self.spin_x_spacing.value()
-            y_space = self.spin_y_spacing.value()
+            panel = self.property_panel.get_subplot_panel()
+            mode = panel.combo_def_mode.currentIndex() # 0: RC, 1: Size
+            x_space = panel.spin_x_spacing.value()
+            y_space = panel.spin_y_spacing.value()
 
-            gdf = self.generator.generate(
-                self.boundary_gdf, rows, cols, x_space, y_space, output_path=None
-            )
+            if mode == 0:
+                rows = panel.spin_rows.value()
+                cols = panel.spin_cols.value()
+                # Call generator logic for RC mode
+                gdf = self.generator.generate(
+                    self.boundary_gdf, rows, cols, x_space, y_space, output_path=None
+                )
+            else:
+                 # Calculate Rows/Cols from Size (Cell Width/Height)
+                 cell_width = panel.spin_width.value()
+                 cell_height = panel.spin_height.value()
+                 
+                 bounds = self.boundary_gdf.total_bounds # minx, miny, maxx, maxy
+                 total_width = bounds[2] - bounds[0]
+                 total_height = bounds[3] - bounds[1]
+                 
+                 # Width = Cols * CellWidth + (Cols - 1) * XMethod
+                 # TotalWidth approx Cols * (CellWidth + XSpace) - XSpace
+                 # Cols = (TotalWidth + XSpace) / (CellWidth + XSpace)
+                 
+                 if cell_width + x_space > 0:
+                    cols = int(round((total_width + x_space) / (cell_width + x_space)))
+                 else:
+                    cols = 1
+                    
+                 if cell_height + y_space > 0:
+                    rows = int(round((total_height + y_space) / (cell_height + y_space)))
+                 else:
+                    rows = 1
+                 
+                 cols = max(1, cols)
+                 rows = max(1, rows)
+
+                 gdf = self.generator.generate(
+                    self.boundary_gdf, rows, cols, x_space, y_space, output_path=None
+                )
             
             if gdf is not None:
                 self.map_component.map_canvas.add_vector_layer(
@@ -235,10 +218,11 @@ class SubplotTab(MapInterface):
 
     @Slot()
     def _on_focus(self):
-        """Focus on boundary layer and auto-rotate."""
+        """Focus on the boundary layer."""
         if self.boundary_gdf is not None:
+            # Focus logic here (usually handled by map_component)
             self.map_component.map_canvas.zoom_to_layer("Boundary")
-            
+
             # Auto-rotate
             angle = self.generator.calculate_optimal_rotation(self.boundary_gdf)
             if angle is not None:
@@ -248,26 +232,52 @@ class SubplotTab(MapInterface):
 
     @Slot()
     def _on_generate(self):
-        """Generate and save subplots."""
+        """Generate subplots and save."""
         if self.boundary_gdf is None:
             InfoBar.warning(
                 title=tr("warning"),
-                content=tr("page.subplot.warning.no_boundary"),
+                content=tr("page.subplot.msg.no_boundary"),
                 parent=self
             )
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
-            self, tr("page.subplot.dialog.save_shp"), "", "Shapefile (*.shp)"
+            self, tr("page.subplot.dialog.save"), "", "Shapefile (*.shp)"
         )
+
         if not file_path:
             return
 
         try:
-            rows = self.spin_rows.value()
-            cols = self.spin_cols.value()
-            x_space = self.spin_x_spacing.value()
-            y_space = self.spin_y_spacing.value()
+            panel = self.property_panel.get_subplot_panel()
+            mode = panel.combo_def_mode.currentIndex()
+            x_space = panel.spin_x_spacing.value()
+            y_space = panel.spin_y_spacing.value()
+
+            if mode == 0:
+                rows = panel.spin_rows.value()
+                cols = panel.spin_cols.value()
+            else:
+                 # Recalculate for final generation to be safe
+                 cell_width = panel.spin_width.value()
+                 cell_height = panel.spin_height.value()
+                 
+                 bounds = self.boundary_gdf.total_bounds
+                 total_width = bounds[2] - bounds[0]
+                 total_height = bounds[3] - bounds[1]
+                 
+                 if cell_width + x_space > 0:
+                    cols = int(round((total_width + x_space) / (cell_width + x_space)))
+                 else:
+                    cols = 1
+                    
+                 if cell_height + y_space > 0:
+                    rows = int(round((total_height + y_space) / (cell_height + y_space)))
+                 else:
+                    rows = 1
+                 
+                 cols = max(1, cols)
+                 rows = max(1, rows)
 
             self.generator.generate(
                 self.boundary_gdf, rows, cols, x_space, y_space, output_path=file_path
@@ -275,14 +285,14 @@ class SubplotTab(MapInterface):
             
             InfoBar.success(
                 title=tr("success"),
-                content=tr("page.subplot.success.generated"),
+                content=tr("page.subplot.msg.success"),
                 parent=self
             )
             
             # Load the generated result
-            self.map_component.map_canvas.add_vector_layer(
-                file_path, "Result", color='#0000FF', width=2
-            )
+            # self.map_component.map_canvas.add_vector_layer(
+            #     file_path, "Result", color='#0000FF', width=2
+            # )
             
         except Exception as e:
             InfoBar.error(
@@ -290,3 +300,9 @@ class SubplotTab(MapInterface):
                 content=f"Generation failed: {e}",
                 parent=self
             )
+
+    @Slot()
+    def _on_reset(self):
+        """Reset parameters."""
+        # TODO: Implement reset logic if needed
+        pass
