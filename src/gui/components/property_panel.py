@@ -42,9 +42,13 @@ from qfluentwidgets import (
     StrongBodyLabel,
     SubtitleLabel,
     ScrollArea,
+    StrongBodyLabel,
+    SubtitleLabel,
+    ScrollArea,
     Theme,
     PrimaryPushButton,
-    PushButton
+    PushButton,
+    Pivot
 )
 from src.gui.config import cfg
 from pathlib import Path
@@ -96,9 +100,24 @@ class SubplotPropertyPanel(QWidget):
         self.layout.setContentsMargins(14, 16, 14, 14)
         self.layout.setAlignment(Qt.AlignTop)
 
-        # --- Layout Group ---
-        self.layout.addWidget(StrongBodyLabel(tr("page.subplot.group.layout")))
+        # --- Pivot Navigation ---
+        self.pivot = Pivot(self)
+        self.layout.addWidget(self.pivot)
 
+        # --- Content Stack ---
+        self.content_stack = QStackedWidget(self)
+        self.layout.addWidget(self.content_stack)
+
+        # ==========================================
+        # Page 1: Layout Settings
+        # ==========================================
+        self.page_layout = QWidget()
+        layout_page_layout = QVBoxLayout(self.page_layout)
+        layout_page_layout.setContentsMargins(0, 0, 0, 0)
+        layout_page_layout.setSpacing(16)
+        layout_page_layout.setAlignment(Qt.AlignTop)
+
+        # --- Layout Group Content (Def Mode, Dim, Spacing) ---
         self.def_mode_group = QWidget()
         layout_def_mode = QVBoxLayout(self.def_mode_group)
         layout_def_mode.setContentsMargins(0, 0, 0, 0)
@@ -106,21 +125,21 @@ class SubplotPropertyPanel(QWidget):
 
         self.lbl_def_mode = BodyLabel(tr("page.subplot.label.def_mode"))
         layout_def_mode.addWidget(self.lbl_def_mode)
-        
+
         self.combo_def_mode = ComboBox()
         self.combo_def_mode.addItems([tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")])
 
         layout_def_mode.addWidget(self.combo_def_mode)
 
-        self.layout.addWidget(self.def_mode_group)
+        layout_page_layout.addWidget(self.def_mode_group)
 
         # --- Dimensions Group ---
         # We use a Stacked Widget to switch between Row/Col and Width/Height inputs
         self.dim_stack = QStackedWidget()
         
         # Page 1: Rows / Cols
-        self.page_rc = QWidget()
-        layout_rc = QVBoxLayout(self.page_rc)
+        self.dim_page_rc = QWidget() # Rename to avoid conflict
+        layout_rc = QVBoxLayout(self.dim_page_rc)
         layout_rc.setContentsMargins(0, 0, 0, 0)
         layout_rc.setSpacing(8)
         
@@ -140,16 +159,16 @@ class SubplotPropertyPanel(QWidget):
         self.spin_rows.setValue(5)
         layout_rc.addWidget(self.spin_rows)
         
-        self.dim_stack.addWidget(self.page_rc)
+        self.dim_stack.addWidget(self.dim_page_rc)
 
         # Page 2: Width / Height (Size in meters)
-        self.page_size = QWidget()
-        layout_size = QVBoxLayout(self.page_size)
+        self.dim_page_size = QWidget() # Rename
+        layout_size = QVBoxLayout(self.dim_page_size)
         layout_size.setContentsMargins(0, 0, 0, 0)
         layout_size.setSpacing(8)
         
         # Width
-        self.lbl_width = BodyLabel(tr("page.subplot.label.width_m")) # Need to add this key or reuse "Width"
+        self.lbl_width = BodyLabel(tr("page.subplot.label.width_m"))
         layout_size.addWidget(self.lbl_width)
         self.spin_width = DoubleSpinBox()
         self.spin_width.setRange(0.1, 1000.0)
@@ -158,7 +177,7 @@ class SubplotPropertyPanel(QWidget):
         layout_size.addWidget(self.spin_width)
         
         # Height
-        self.lbl_height = BodyLabel(tr("page.subplot.label.height_m")) # Need to add key
+        self.lbl_height = BodyLabel(tr("page.subplot.label.height_m"))
         layout_size.addWidget(self.lbl_height)
         self.spin_height = DoubleSpinBox()
         self.spin_height.setRange(0.1, 1000.0)
@@ -166,32 +185,42 @@ class SubplotPropertyPanel(QWidget):
         self.spin_height.setSuffix(" m")
         layout_size.addWidget(self.spin_height)
         
-        self.dim_stack.addWidget(self.page_size)
+        self.dim_stack.addWidget(self.dim_page_size)
         
-        self.layout.addWidget(self.dim_stack)
-        
+        layout_page_layout.addWidget(self.dim_stack)
+
         # X Spacing
-        self.layout.addWidget(BodyLabel(tr("page.subplot.label.x_space")))
+        layout_page_layout.addWidget(BodyLabel(tr("page.subplot.label.x_space")))
         self.spin_x_spacing = DoubleSpinBox()
         self.spin_x_spacing.setRange(-10, 100)
         self.spin_x_spacing.setValue(0.0)
         self.spin_x_spacing.setSuffix(" m")
-        self.layout.addWidget(self.spin_x_spacing)
+        layout_page_layout.addWidget(self.spin_x_spacing)
 
         # Y Spacing
-        self.layout.addWidget(BodyLabel(tr("page.subplot.label.y_space")))
+        layout_page_layout.addWidget(BodyLabel(tr("page.subplot.label.y_space")))
         self.spin_y_spacing = DoubleSpinBox()
         self.spin_y_spacing.setRange(-10, 100)
         self.spin_y_spacing.setValue(0.0)
         self.spin_y_spacing.setSuffix(" m")
-        self.layout.addWidget(self.spin_y_spacing)
+        layout_page_layout.addWidget(self.spin_y_spacing)
         
-        self.layout.addSpacing(8)
+        # Add Stretch to page layout
+        layout_page_layout.addStretch()
 
-        # --- Numbering Rules Group ---
-        self.layout.addWidget(StrongBodyLabel(tr("prop.group.numbering")))
+        # Add page to main content stack
+        self.content_stack.addWidget(self.page_layout)
 
-        self.layout.addWidget(BodyLabel(tr("prop.label.numbering_mode")))
+        # ==========================================
+        # Page 2: Numbering Rules
+        # ==========================================
+        self.page_numbering = QWidget()
+        layout_numbering = QVBoxLayout(self.page_numbering)
+        layout_numbering.setContentsMargins(0, 0, 0, 0)
+        layout_numbering.setSpacing(8)
+        layout_numbering.setAlignment(Qt.AlignTop)
+
+        layout_numbering.addWidget(BodyLabel(tr("prop.label.numbering_mode")))
         self.combo_numbering = ComboBox()
         self.combo_numbering.addItems([
             "行列命名 (R1C1, R1C2...)",
@@ -199,37 +228,50 @@ class SubplotPropertyPanel(QWidget):
             "蛇形编号",
             "自定义格式"
         ])
-        self.layout.addWidget(self.combo_numbering)
+        layout_numbering.addWidget(self.combo_numbering)
         
-        self.layout.addWidget(BodyLabel(tr("prop.label.start_row")))
+        layout_numbering.addWidget(BodyLabel(tr("prop.label.start_row")))
         self.spin_start_row = SpinBox()
         self.spin_start_row.setRange(0, 1000)
         self.spin_start_row.setValue(1)
-        self.layout.addWidget(self.spin_start_row)
+        layout_numbering.addWidget(self.spin_start_row)
         
-        self.layout.addWidget(BodyLabel(tr("prop.label.start_col")))
+        layout_numbering.addWidget(BodyLabel(tr("prop.label.start_col")))
         self.spin_start_col = SpinBox()
         self.spin_start_col.setRange(0, 1000)
         self.spin_start_col.setValue(1)
-        self.layout.addWidget(self.spin_start_col)
+        layout_numbering.addWidget(self.spin_start_col)
         
-        self.layout.addWidget(BodyLabel(tr("prop.label.prefix")))
+        layout_numbering.addWidget(BodyLabel(tr("prop.label.prefix")))
         self.edit_prefix = LineEdit()
         self.edit_prefix.setPlaceholderText("例如: Plot_")
-        self.layout.addWidget(self.edit_prefix)
+        layout_numbering.addWidget(self.edit_prefix)
         
-        self.layout.addWidget(BodyLabel(tr("prop.label.suffix")))
+        layout_numbering.addWidget(BodyLabel(tr("prop.label.suffix")))
         self.edit_suffix = LineEdit()
         self.edit_suffix.setPlaceholderText("例如: _2024")
-        self.layout.addWidget(self.edit_suffix)
+        layout_numbering.addWidget(self.edit_suffix)
 
-        self.layout.addStretch()
+        layout_numbering.addStretch()
+
+        self.content_stack.addWidget(self.page_numbering)
+
+        # --- Setup Pivot ---
+        self.pivot.addItem(routeKey="layout", text=tr("page.subplot.group.layout"))
+        self.pivot.addItem(routeKey="numbering", text=tr("prop.group.numbering"))
+        self.pivot.currentItemChanged.connect(lambda k: self.content_stack.setCurrentIndex(0 if k == "layout" else 1))
+        self.pivot.setCurrentItem("layout")
+        
+        # --- Reset Layout Stretch ---
+        # The main layout stretch is now handled by content_stack pages having stretches
+        # But we remove the old addStretch() call below
 
         # --- Action Buttons ---
+
         action_layout = QHBoxLayout()
         action_layout.setSpacing(8)
         
-        self.btn_reset = PushButton(tr("btn.reset")) # Need key
+        self.btn_reset = PushButton(tr("page.subplot.btn.reset")) # Need key
         self.btn_reset.clicked.connect(self.sigReset)
         action_layout.addWidget(self.btn_reset)
         
