@@ -46,6 +46,10 @@
     "page.subplot.label.height_m": "高さ(m):",
     "page.subplot.label.x_space": "X間隔:",
     "page.subplot.label.y_space": "Y間隔:",
+    "page.subplot.label.keep": "保持モード:",
+    "page.subplot.keep.all": "all",
+    "page.subplot.keep.touch": "touch",
+    "page.subplot.keep.inside": "inside",
     "page.subplot.group.view": "表示",
     "page.subplot.check.preview": "リアルタイム",
     "page.subplot.btn.focus": "フォーカス回転",
@@ -54,6 +58,7 @@
 
     "page.subplot.dialog.load_image": "背景画像読込",
     "page.subplot.dialog.load_boundary": "境界SHP読込",
+    "page.subplot.dialog.save": "サブプロットSHP保存",
     "page.subplot.error.invalid_boundary": "境界ファイルが正しくありません！",
     "page.subplot.warning.no_boundary": "境界ファイルを先に読込してください！",
     "page.subplot.msg.success": "サブプロット生成と保存が完了しました！",

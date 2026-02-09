@@ -1,42 +1,27 @@
+"""Subplot generation tab based on EasyIDP."""
 
+from __future__ import annotations
+
+from pathlib import Path
 from typing import Optional
-from PySide6.QtWidgets import QWidget, QLabel, QFileDialog, QMessageBox
+
+from loguru import logger
 from PySide6.QtCore import Signal, Slot
-from qfluentwidgets import (
-    PushButton,
-    PrimaryPushButton,
-    ComboBox,
-    SpinBox,
-    DoubleSpinBox,
-    CheckBox,
-    InfoBar,
-    PushButton,
-    PrimaryPushButton,
-    ComboBox,
-    SpinBox,
-    DoubleSpinBox,
-    CheckBox,
-    InfoBar,
-    BodyLabel,
-    StrongBodyLabel,
-    SubtitleLabel
-)
+from PySide6.QtWidgets import QFileDialog, QWidget
+from qfluentwidgets import CheckBox, InfoBar, PushButton
 
-from loguru import logger
-from pathlib import Path
-
-from loguru import logger
-from pathlib import Path
-
-from src.gui.components.base_interface import TabInterface, PageGroup
+from src.gui.components.base_interface import PageGroup, TabInterface
 from src.gui.config import tr
-from src.core.subplot_generator import SubplotGenerator
+from src.gui.tabs.subplot_easyidp import (
+    calculate_optimal_rotation,
+    generate_and_save,
+    generate_subplots_roi,
+    load_boundary_roi,
+)
 
 
 class SubplotTab(TabInterface):
-    """
-    Interface content for Subplot Generation.
-    """
+    """UI workflow for subplot generation using EasyIDP."""
 
     sigLoadImage = Signal()
     sigLoadBoundary = Signal()
@@ -45,24 +30,30 @@ class SubplotTab(TabInterface):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self.boundary_roi = None
+        self.last_preview_roi = None
         self._init_ui()
 
-    def _init_layout(self):
+    def _init_layout(self) -> None:
+        """Initialize layout and map signal forwarding."""
         super()._init_layout()
-        
-        # Connect Map Canvas signals
-        self.map_component.map_canvas.sigRotationChanged.connect(self._on_canvas_rotation_changed)
-
-    def _on_canvas_rotation_changed(self, angle):
-        """Handle rotation change from map canvas."""
-        subplot_panel = self.property_panel.get_subplot_panel()
-        subplot_panel.spin_rotation.blockSignals(True)
-        subplot_panel.spin_rotation.setValue(angle)
-        subplot_panel.spin_rotation.blockSignals(False)
+        self.map_component.map_canvas.sigRotationChanged.connect(
+            self._on_canvas_rotation_changed
+        )
 
     def _init_ui(self) -> None:
-        """Initialize the controls for subplot generation."""
-        # --- File Group ---
+        """Initialize tab controls and panel signal wiring."""
+        self._build_file_group()
+        self._build_view_group()
+        self.add_stretch()
+
+        panel = self.property_panel.get_subplot_panel()
+        panel.sigGenerate.connect(self._on_generate)
+        panel.sigReset.connect(self._on_reset)
+        panel.sigParamChanged.connect(self._auto_preview)
+
+    def _build_file_group(self) -> None:
+        """Build file loading control group."""
         file_group = PageGroup(tr("page.subplot.group.file"))
 
         self.btn_load_image = PushButton(tr("page.subplot.btn.load_image"))
@@ -75,9 +66,9 @@ class SubplotTab(TabInterface):
 
         self.add_group(file_group)
 
-        # --- View Group ---
-        view_group = PageGroup(tr("page.subplot.group.view")) # Reusing action key for View
-
+    def _build_view_group(self) -> None:
+        """Build map-view control group."""
+        view_group = PageGroup(tr("page.subplot.group.view"))
         self.check_preview = CheckBox(tr("page.subplot.check.preview"))
         self.check_preview.setChecked(True)
         self.check_preview.stateChanged.connect(self._auto_preview)
@@ -88,221 +79,171 @@ class SubplotTab(TabInterface):
         view_group.add_widget(self.btn_focus)
 
         self.add_group(view_group)
-        self.add_stretch()
-        
-        # Connect Action Signals from Property Panel
+
+    def _collect_params(self) -> dict:
+        """Collect subplot parameters from property panel widgets.
+
+        Returns
+        -------
+        dict
+            Runtime parameters mapped to EasyIDP helper call schema.
+        """
         panel = self.property_panel.get_subplot_panel()
-        panel.sigGenerate.connect(self._on_generate)
-        panel.sigReset.connect(self._on_reset)
-        panel.sigParamChanged.connect(self._auto_preview)
+        keep_values = ("all", "touch", "inside")
+        keep_mode = keep_values[panel.combo_keep.currentIndex()]
+        return {
+            "mode_index": panel.combo_def_mode.currentIndex(),
+            "rows": panel.spin_rows.value(),
+            "cols": panel.spin_cols.value(),
+            "width": panel.spin_width.value(),
+            "height": panel.spin_height.value(),
+            "x_spacing": panel.spin_x_spacing.value(),
+            "y_spacing": panel.spin_y_spacing.value(),
+            "keep_mode": keep_mode,
+        }
 
-        # Init Generator
-        self.generator = SubplotGenerator()
-        self.boundary_gdf = None
-
-        # Init Maps
-        # self.map_component comes from MapInterface
-
-    @Slot()
-    def _on_load_image(self):
-        """Load background image (DOM)."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, tr("page.subplot.dialog.load_image"), "", "Image Files (*.tif *.tiff *.png *.jpg);;All Files (*)"
-        )
-        if file_path:
-            logger.info(f"User selected image: {file_path}")
-            if self.map_component.map_canvas.add_raster_layer(file_path):
-                logger.info("Image loaded successfully.")
-                # Show success message
-                InfoBar.success(
-                    title=tr("success"),
-                    content=f"Loaded: {Path(file_path).name}",
-                    parent=self,
-                    duration=3000
-                )
-                
-                # Zoom to image if no boundary loaded
-                if self.boundary_gdf is None:
-                    self.map_component.map_canvas.zoom_to_layer(Path(file_path).stem)
-                    
-            else:
-                logger.error(f"Failed to load image: {file_path}")
-                InfoBar.error(
-                    title=tr("error"),
-                    content=f"Failed to load image: {file_path}",
-                    parent=self
-                )
-
-    @Slot()
-    def _on_load_boundary(self):
-        """Load boundary SHP."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, tr("page.subplot.dialog.load_boundary"), "", "Shapefile (*.shp);;All Files (*)"
-        )
-        if file_path:
-            gdf = self.generator.load_boundary(file_path)
-            if gdf is not None:
-                self.boundary_gdf = gdf
-                self.map_component.map_canvas.add_vector_layer(
-                    gdf, "Boundary", color='#FF0000', width=2
-                )
-                self._auto_preview()
-            else:
-                InfoBar.error(
-                    title=tr("error"),
-                    content=tr("page.subplot.error.invalid_boundary"),
-                    parent=self
-                )
-
-    @Slot()
-    def _on_mode_changed(self, index: int):
-        """Handle definition mode change."""
-        pass # Now handled in Property Panel
-
-    @Slot()
-    def _auto_preview(self):
-        """Generate preview if checkbox is checked."""
-        if not self.check_preview.isChecked() or self.boundary_gdf is None:
+    def _show_preview(self) -> None:
+        """Generate and render preview layer when boundary exists."""
+        if self.boundary_roi is None:
             return
-        
-        try:
-            panel = self.property_panel.get_subplot_panel()
-            mode = panel.combo_def_mode.currentIndex() # 0: RC, 1: Size
-            x_space = panel.spin_x_spacing.value()
-            y_space = panel.spin_y_spacing.value()
 
-            if mode == 0:
-                rows = panel.spin_rows.value()
-                cols = panel.spin_cols.value()
-                # Call generator logic for RC mode
-                gdf = self.generator.generate(
-                    self.boundary_gdf, rows, cols, x_space, y_space, output_path=None
-                )
-            else:
-                 # Calculate Rows/Cols from Size (Cell Width/Height)
-                 cell_width = panel.spin_width.value()
-                 cell_height = panel.spin_height.value()
-                 
-                 bounds = self.boundary_gdf.total_bounds # minx, miny, maxx, maxy
-                 total_width = bounds[2] - bounds[0]
-                 total_height = bounds[3] - bounds[1]
-                 
-                 # Width = Cols * CellWidth + (Cols - 1) * XMethod
-                 # TotalWidth approx Cols * (CellWidth + XSpace) - XSpace
-                 # Cols = (TotalWidth + XSpace) / (CellWidth + XSpace)
-                 
-                 if cell_width + x_space > 0:
-                    cols = int(round((total_width + x_space) / (cell_width + x_space)))
-                 else:
-                    cols = 1
-                    
-                 if cell_height + y_space > 0:
-                    rows = int(round((total_height + y_space) / (cell_height + y_space)))
-                 else:
-                    rows = 1
-                 
-                 cols = max(1, cols)
-                 rows = max(1, rows)
+        params = self._collect_params()
+        preview_roi = generate_subplots_roi(self.boundary_roi, **params)
+        self.last_preview_roi = preview_roi
+        self.map_component.map_canvas.add_vector_layer(
+            preview_roi,
+            "Preview",
+            color="#00FF00",
+            width=1,
+        )
 
-                 gdf = self.generator.generate(
-                    self.boundary_gdf, rows, cols, x_space, y_space, output_path=None
-                )
-            
-            if gdf is not None:
-                self.map_component.map_canvas.add_vector_layer(
-                    gdf, "Preview", color='#00FF00', width=1
-                )
-        except Exception as e:
-            # Don't show popup on auto preview error, just log
-            print(f"Preview error: {e}")
+    @Slot(float)
+    def _on_canvas_rotation_changed(self, angle: float) -> None:
+        """Update rotation widget when map rotation changes.
+
+        Parameters
+        ----------
+        angle : float
+            Rotation angle in degrees.
+        """
+        logger.debug(f"Canvas rotation changed: {angle:.2f} degree")
 
     @Slot()
-    def _on_focus(self):
-        """Focus on the boundary layer."""
-        if self.boundary_gdf is not None:
-            # Focus logic here (usually handled by map_component)
-            self.map_component.map_canvas.zoom_to_layer("Boundary")
+    def _on_load_image(self) -> None:
+        """Load a raster image as base layer."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("page.subplot.dialog.load_image"),
+            "",
+            "Image Files (*.tif *.tiff *.png *.jpg);;All Files (*)",
+        )
+        if not file_path:
+            return
 
-            # Auto-rotate
-            angle = self.generator.calculate_optimal_rotation(self.boundary_gdf)
-            if angle is not None:
-                self.map_component.map_canvas.set_rotation(angle)
-            else:
-                self.map_component.map_canvas.set_rotation(0)
-
-    @Slot()
-    def _on_generate(self):
-        """Generate subplots and save."""
-        if self.boundary_gdf is None:
-            InfoBar.warning(
-                title=tr("warning"),
-                content=tr("page.subplot.msg.no_boundary"),
-                parent=self
+        if self.map_component.map_canvas.add_raster_layer(file_path):
+            InfoBar.success(
+                title=tr("success"),
+                content=f"Loaded: {Path(file_path).name}",
+                parent=self,
+                duration=3000,
             )
+            if self.boundary_roi is None:
+                self.map_component.map_canvas.zoom_to_layer(Path(file_path).stem)
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, tr("page.subplot.dialog.save"), "", "Shapefile (*.shp)"
+        InfoBar.error(
+            title=tr("error"),
+            content=f"Failed to load image: {file_path}",
+            parent=self,
         )
 
+    @Slot()
+    def _on_load_boundary(self) -> None:
+        """Load boundary shapefile into ROI model."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("page.subplot.dialog.load_boundary"),
+            "",
+            "Shapefile (*.shp);;All Files (*)",
+        )
         if not file_path:
             return
 
         try:
-            panel = self.property_panel.get_subplot_panel()
-            mode = panel.combo_def_mode.currentIndex()
-            x_space = panel.spin_x_spacing.value()
-            y_space = panel.spin_y_spacing.value()
-
-            if mode == 0:
-                rows = panel.spin_rows.value()
-                cols = panel.spin_cols.value()
-            else:
-                 # Recalculate for final generation to be safe
-                 cell_width = panel.spin_width.value()
-                 cell_height = panel.spin_height.value()
-                 
-                 bounds = self.boundary_gdf.total_bounds
-                 total_width = bounds[2] - bounds[0]
-                 total_height = bounds[3] - bounds[1]
-                 
-                 if cell_width + x_space > 0:
-                    cols = int(round((total_width + x_space) / (cell_width + x_space)))
-                 else:
-                    cols = 1
-                    
-                 if cell_height + y_space > 0:
-                    rows = int(round((total_height + y_space) / (cell_height + y_space)))
-                 else:
-                    rows = 1
-                 
-                 cols = max(1, cols)
-                 rows = max(1, rows)
-
-            self.generator.generate(
-                self.boundary_gdf, rows, cols, x_space, y_space, output_path=file_path
+            self.boundary_roi = load_boundary_roi(file_path)
+            self.map_component.map_canvas.add_vector_layer(
+                self.boundary_roi,
+                "Boundary",
+                color="#FF0000",
+                width=2,
             )
-            
-            InfoBar.success(
-                title=tr("success"),
-                content=tr("page.subplot.msg.success"),
-                parent=self
-            )
-            
-            # Load the generated result
-            # self.map_component.map_canvas.add_vector_layer(
-            #     file_path, "Result", color='#0000FF', width=2
-            # )
-            
-        except Exception as e:
+            self._auto_preview()
+        except Exception as exc:  # pragma: no cover - UI feedback branch
+            logger.exception("Failed to load boundary")
             InfoBar.error(
                 title=tr("error"),
-                content=f"Generation failed: {e}",
-                parent=self
+                content=f"{tr('page.subplot.error.invalid_boundary')} ({exc})",
+                parent=self,
             )
 
     @Slot()
-    def _on_reset(self):
-        """Reset parameters."""
-        # TODO: Implement reset logic if needed
-        pass
+    def _auto_preview(self) -> None:
+        """Trigger preview refresh when enabled."""
+        if not self.check_preview.isChecked() or self.boundary_roi is None:
+            return
+
+        try:
+            self._show_preview()
+        except Exception as exc:  # pragma: no cover - UI feedback branch
+            logger.debug(f"Preview error: {exc}")
+
+    @Slot()
+    def _on_focus(self) -> None:
+        """Zoom to boundary and apply MAR-based auto-rotation."""
+        if self.boundary_roi is None:
+            return
+
+        self.map_component.map_canvas.zoom_to_layer("Boundary")
+        angle = calculate_optimal_rotation(self.boundary_roi)
+        self.map_component.map_canvas.set_rotation(0 if angle is None else angle)
+
+    @Slot()
+    def _on_generate(self) -> None:
+        """Generate subplots and save as shapefile."""
+        if self.boundary_roi is None:
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.subplot.warning.no_boundary"),
+                parent=self,
+            )
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("page.subplot.dialog.save"),
+            "",
+            "Shapefile (*.shp)",
+        )
+        if not file_path:
+            return
+
+        try:
+            params = self._collect_params()
+            generate_and_save(self.boundary_roi, output_path=file_path, **params)
+            InfoBar.success(
+                title=tr("success"),
+                content=tr("page.subplot.msg.success"),
+                parent=self,
+            )
+        except Exception as exc:  # pragma: no cover - UI feedback branch
+            logger.exception("Subplot save failed")
+            InfoBar.error(
+                title=tr("error"),
+                content=f"Generation failed: {exc}",
+                parent=self,
+            )
+
+    @Slot()
+    def _on_reset(self) -> None:
+        """Reset action placeholder for future extension."""
+        logger.debug("Subplot reset clicked")

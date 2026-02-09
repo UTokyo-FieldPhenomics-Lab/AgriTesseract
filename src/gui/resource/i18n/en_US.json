@@ -46,6 +46,10 @@
     "page.subplot.label.height_m": "Height (m):",
     "page.subplot.label.x_space": "X Spacing:",
     "page.subplot.label.y_space": "Y Spacing:",
+    "page.subplot.label.keep": "Keep Mode:",
+    "page.subplot.keep.all": "all",
+    "page.subplot.keep.touch": "touch",
+    "page.subplot.keep.inside": "inside",
     "page.subplot.group.view": "View",
     "page.subplot.check.preview": "Live Preview",
     "page.subplot.btn.focus": "Focus & Rotate",
@@ -54,6 +58,7 @@
 
     "page.subplot.dialog.load_image": "Load Background Image",
     "page.subplot.dialog.load_boundary": "Load Plot Boundary Shapefile",
+    "page.subplot.dialog.save": "Save Subplot Shapefile",
     "page.subplot.error.invalid_boundary": "Invalid boundary file! Please select a Shapefile containing exactly one Polygon.",
     "page.subplot.warning.no_boundary": "Please load a boundary file first!",
     "page.subplot.msg.success": "Subplots generated and saved successfully!",

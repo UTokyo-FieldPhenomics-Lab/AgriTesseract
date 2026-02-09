@@ -46,6 +46,10 @@
     "page.subplot.label.height_m": "高度(m):",
     "page.subplot.label.x_space": "X间距:",
     "page.subplot.label.y_space": "Y间距:",
+    "page.subplot.label.keep": "保留模式:",
+    "page.subplot.keep.all": "all",
+    "page.subplot.keep.touch": "touch",
+    "page.subplot.keep.inside": "inside",
     "page.subplot.group.view": "视图",
     "page.subplot.check.preview": "实时预览",
     "page.subplot.btn.focus": "聚焦旋转",
@@ -54,6 +58,7 @@
 
     "page.subplot.dialog.load_image": "背景影像加载",
     "page.subplot.dialog.load_boundary": "边界SHP加载",
+    "page.subplot.dialog.save": "保存小样地SHP",
     "page.subplot.error.invalid_boundary": "边界文件格式错误！",
     "page.subplot.warning.no_boundary": "请先加载边界文件！",
     "page.subplot.msg.success": "小样地生成和保存成功！",

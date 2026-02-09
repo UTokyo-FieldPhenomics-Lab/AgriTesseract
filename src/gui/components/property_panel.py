@@ -49,7 +49,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     PushButton,
     Pivot,
-    InfoBadge
+    InfoBadge,
 )
 from src.gui.config import cfg
 from pathlib import Path
@@ -58,69 +58,84 @@ import darkdetect
 
 class PropBase(QWidget):
     """Base class for property widgets with a label and a control."""
-    
+
     def __init__(self, title: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(4)
-        
+
         self.label = BodyLabel(title)
         self.layout.addWidget(self.label)
-        
+
     def add_widget(self, widget: QWidget):
         self.layout.addWidget(widget)
 
 
 class PropComboBox(PropBase):
     """Property widget with a ComboBox."""
-    
+
     currentIndexChanged = Signal(int)
-    
-    def __init__(self, title: str, items: list[str] = None, parent: Optional[QWidget] = None) -> None:
+
+    def __init__(
+        self, title: str, items: list[str] = None, parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(title, parent)
         self.combo = ComboBox()
         if items:
             self.combo.addItems(items)
         self.combo.currentIndexChanged.connect(self.currentIndexChanged)
         self.add_widget(self.combo)
-        
+
     def setCurrentIndex(self, index: int):
         self.combo.setCurrentIndex(index)
-        
+
     def currentIndex(self) -> int:
         return self.combo.currentIndex()
-        
+
     def addItems(self, items: list[str]):
         self.combo.addItems(items)
 
 
 class PropSpinBox(PropBase):
     """Property widget with a SpinBox."""
-    
+
     valueChanged = Signal(int)
-    
-    def __init__(self, title: str, range: tuple[int, int] = (0, 100), value: int = 0, parent: Optional[QWidget] = None) -> None:
+
+    def __init__(
+        self,
+        title: str,
+        range: tuple[int, int] = (0, 100),
+        value: int = 0,
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(title, parent)
         self.spin = SpinBox()
         self.spin.setRange(*range)
         self.spin.setValue(value)
         self.spin.valueChanged.connect(self.valueChanged)
         self.add_widget(self.spin)
-        
+
     def setValue(self, value: int):
         self.spin.setValue(value)
-        
+
     def value(self) -> int:
         return self.spin.value()
 
 
 class PropDoubleSpinBox(PropBase):
     """Property widget with a DoubleSpinBox."""
-    
+
     valueChanged = Signal(float)
-    
-    def __init__(self, title: str, range: tuple[float, float] = (0.0, 100.0), value: float = 0.0, suffix: str = "", parent: Optional[QWidget] = None) -> None:
+
+    def __init__(
+        self,
+        title: str,
+        range: tuple[float, float] = (0.0, 100.0),
+        value: float = 0.0,
+        suffix: str = "",
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(title, parent)
         self.spin = DoubleSpinBox()
         self.spin.setRange(*range)
@@ -129,40 +144,48 @@ class PropDoubleSpinBox(PropBase):
             self.spin.setSuffix(suffix)
         self.spin.valueChanged.connect(self.valueChanged)
         self.add_widget(self.spin)
-        
+
     def setValue(self, value: float):
         self.spin.setValue(value)
-        
+
     def value(self) -> float:
         return self.spin.value()
 
 
 class PropLineEdit(PropBase):
     """Property widget with a LineEdit."""
-    
+
     textChanged = Signal(str)
-    
-    def __init__(self, title: str, placeholder: str = "", parent: Optional[QWidget] = None) -> None:
+
+    def __init__(
+        self, title: str, placeholder: str = "", parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(title, parent)
         self.edit = LineEdit()
         if placeholder:
             self.edit.setPlaceholderText(placeholder)
         self.edit.textChanged.connect(self.textChanged)
         self.add_widget(self.edit)
-        
+
     def text(self) -> str:
         return self.edit.text()
-    
+
     def setText(self, text: str):
         self.edit.setText(text)
 
 
 class PropInfo(PropBase):
     """Property widget with an InfoBadge."""
-    
-    def __init__(self, title: str, value: str = "", badge_type='info', parent: Optional[QWidget] = None) -> None:
+
+    def __init__(
+        self,
+        title: str,
+        value: str = "",
+        badge_type="info",
+        parent: Optional[QWidget] = None,
+    ) -> None:
         super().__init__(title, parent)
-        # InfoBadge in qfluentwidgets usually takes just parent. 
+        # InfoBadge in qfluentwidgets usually takes just parent.
         # Using a custom wrapper or just BodyLabel/InfoBadge if available.
         # Assuming InfoBadge exists and works like a label or small indicator.
         # If InfoBadge is not suitable for generic text, we might use BodyLabel with styling.
@@ -171,12 +194,12 @@ class PropInfo(PropBase):
         # Adjust method based on type if needed, but 'info' static method is common pattern in Fluent?
         # Actually InfoBadge init is InfoBadge(text, parent, type).
         # We will assume generic usage.
-        
+
         # Re-creating simple badge logic if InfoBadge static methods differ
         # Using standard instantiation
         self.badge = InfoBadge(text=value)
-        self.layout.addWidget(self.badge) # add_widget wrapper
-        
+        self.layout.addWidget(self.badge)  # add_widget wrapper
+
     def setText(self, text: str):
         self.badge.setText(text)
 
@@ -185,6 +208,7 @@ class PropertyGroup(QGroupBox):
     """
     A collapsible group of properties.
     """
+
     def __init__(self, title: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(title, parent)
         self.setCheckable(True)
@@ -199,7 +223,7 @@ class PropertyGroup(QGroupBox):
 
 class SubplotPropertyPanel(QWidget):
     """Property panel content for Subplot Generation tab."""
-    
+
     sigParamChanged = Signal()
     sigGenerate = Signal()
     sigReset = Signal()
@@ -212,7 +236,7 @@ class SubplotPropertyPanel(QWidget):
     def _init_ui(self) -> None:
         """
         Initialize the UI.
-        
+
         Layout Structure:
         SubplotPropertyPanel (QVBoxLayout)
         ├── pivot (Pivot)
@@ -262,11 +286,8 @@ class SubplotPropertyPanel(QWidget):
         # --- Def Mode Group ---
 
         self.prop_def_mode = PropComboBox(
-            title=tr("page.subplot.label.def_mode"), 
-            items=[
-                tr("page.subplot.combo.rc"), 
-                tr("page.subplot.combo.size")
-            ]
+            title=tr("page.subplot.label.def_mode"),
+            items=[tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")],
         )
         # Map internal widget
         self.combo_def_mode = self.prop_def_mode.combo
@@ -275,63 +296,71 @@ class SubplotPropertyPanel(QWidget):
         # --- Dimensions Group ---
         # Rows / Cols
         self.prop_cols = PropSpinBox(
-            title=tr("page.subplot.label.cols"), 
-            range=(1, 100), 
-            value=5
+            title=tr("page.subplot.label.cols"), range=(1, 100), value=5
         )
         self.spin_cols = self.prop_cols.spin
         stack_layout_inner.addWidget(self.prop_cols)
-        
+
         self.prop_rows = PropSpinBox(
-            title=tr("page.subplot.label.rows"), 
-            range=(1, 100), 
-            value=5
+            title=tr("page.subplot.label.rows"), range=(1, 100), value=5
         )
         self.spin_rows = self.prop_rows.spin
         stack_layout_inner.addWidget(self.prop_rows)
 
         # Width / Height (Size in meters)
         self.prop_width = PropDoubleSpinBox(
-            title=tr("page.subplot.label.width_m"), 
-            range=(0.1, 1000.0), 
-            value=2.0, 
-            suffix=" m"
+            title=tr("page.subplot.label.width_m"),
+            range=(0.1, 1000.0),
+            value=2.0,
+            suffix=" m",
         )
         self.spin_width = self.prop_width.spin
         stack_layout_inner.addWidget(self.prop_width)
-        
+
         self.prop_height = PropDoubleSpinBox(
-            title=tr("page.subplot.label.height_m"), 
-            range=(0.1, 1000.0), 
-            value=2.0, 
-            suffix=" m"
+            title=tr("page.subplot.label.height_m"),
+            range=(0.1, 1000.0),
+            value=2.0,
+            suffix=" m",
         )
         self.spin_height = self.prop_height.spin
         stack_layout_inner.addWidget(self.prop_height)
-        
+
         # Initial visibility state
         self.prop_width.hide()
         self.prop_height.hide()
 
         # X Spacing
         self.prop_x_spacing = PropDoubleSpinBox(
-            title=tr("page.subplot.label.x_space"), 
-            range=(-10, 100), 
-            value=0.0, 
-            suffix=" m"
+            title=tr("page.subplot.label.x_space"),
+            range=(-10, 100),
+            value=0.0,
+            suffix=" m",
         )
         self.spin_x_spacing = self.prop_x_spacing.spin
         stack_layout_inner.addWidget(self.prop_x_spacing)
 
         # Y Spacing
         self.prop_y_spacing = PropDoubleSpinBox(
-            title=tr("page.subplot.label.y_space"), 
-            range=(-10, 100), 
-            value=0.0, 
-            suffix=" m"
+            title=tr("page.subplot.label.y_space"),
+            range=(-10, 100),
+            value=0.0,
+            suffix=" m",
         )
         self.spin_y_spacing = self.prop_y_spacing.spin
         stack_layout_inner.addWidget(self.prop_y_spacing)
+
+        self.prop_keep = PropComboBox(
+            title=tr("page.subplot.label.keep"),
+            items=[
+                tr("page.subplot.keep.all"),
+                tr("page.subplot.keep.touch"),
+                tr("page.subplot.keep.inside"),
+            ],
+        )
+        self.combo_keep = self.prop_keep.combo
+        self.combo_keep.setCurrentIndex(0)
+        stack_layout_inner.addWidget(self.prop_keep)
 
         self.content_stack.addWidget(self.stack_layout)
 
@@ -345,59 +374,61 @@ class SubplotPropertyPanel(QWidget):
         stack_numbering_inner.setAlignment(Qt.AlignTop)
 
         self.prop_mode = PropComboBox(
-            title=tr("prop.label.numbering_mode"), 
+            title=tr("prop.label.numbering_mode"),
             items=[
                 "行列命名 (R1C1, R1C2...)",
                 "连续编号 (1, 2, 3...)",
                 "蛇形编号",
-                "自定义格式"
-            ]
+                "自定义格式",
+            ],
         )
         self.combo_numbering = self.prop_mode.combo
         stack_numbering_inner.addWidget(self.prop_mode)
-        
+
         self.prop_start_row = PropSpinBox(tr("prop.label.start_row"), (0, 1000), 1)
         self.spin_start_row = self.prop_start_row.spin
         stack_numbering_inner.addWidget(self.prop_start_row)
-        
+
         self.prop_start_col = PropSpinBox(tr("prop.label.start_col"), (0, 1000), 1)
         self.spin_start_col = self.prop_start_col.spin
         stack_numbering_inner.addWidget(self.prop_start_col)
-        
+
         self.prop_prefix = PropLineEdit(tr("prop.label.prefix"), "例如: Plot_")
         self.edit_prefix = self.prop_prefix.edit
         stack_numbering_inner.addWidget(self.prop_prefix)
-        
+
         self.prop_suffix = PropLineEdit(tr("prop.label.suffix"), "例如: _2024")
         self.edit_suffix = self.prop_suffix.edit
         stack_numbering_inner.addWidget(self.prop_suffix)
-        
+
         self.content_stack.addWidget(self.stack_numbering)
 
         # --- Setup Pivot ---
         self.pivot.addItem(routeKey="layout", text=tr("page.subplot.group.layout"))
         self.pivot.addItem(routeKey="numbering", text=tr("prop.group.numbering"))
-        self.pivot.currentItemChanged.connect(lambda k: self.content_stack.setCurrentIndex(0 if k == "layout" else 1))
+        self.pivot.currentItemChanged.connect(
+            lambda k: self.content_stack.setCurrentIndex(0 if k == "layout" else 1)
+        )
         self.pivot.setCurrentItem("layout")
 
         # --- Action Buttons ---
         action_layout = QHBoxLayout()
         action_layout.setSpacing(8)
-        
-        self.btn_reset = PushButton(tr("page.subplot.btn.reset")) # Need key
+
+        self.btn_reset = PushButton(tr("page.subplot.btn.reset"))  # Need key
         self.btn_reset.clicked.connect(self.sigReset)
         action_layout.addWidget(self.btn_reset)
-        
+
         self.btn_generate = PrimaryPushButton(tr("page.subplot.btn.save"))
         self.btn_generate.clicked.connect(self.sigGenerate)
         action_layout.addWidget(self.btn_generate)
-        
+
         self.layout.addLayout(action_layout)
 
     def _connect_signals(self):
         """Connect internal signals."""
         self.combo_def_mode.currentIndexChanged.connect(self._on_mode_changed)
-        
+
         # Param changed signals for auto-preview
         self.spin_cols.valueChanged.connect(self.sigParamChanged)
         self.spin_rows.valueChanged.connect(self.sigParamChanged)
@@ -405,11 +436,12 @@ class SubplotPropertyPanel(QWidget):
         self.spin_height.valueChanged.connect(self.sigParamChanged)
         self.spin_x_spacing.valueChanged.connect(self.sigParamChanged)
         self.spin_y_spacing.valueChanged.connect(self.sigParamChanged)
+        self.combo_keep.currentIndexChanged.connect(self.sigParamChanged)
         self.combo_def_mode.currentIndexChanged.connect(self.sigParamChanged)
 
     def _on_mode_changed(self, index: int):
         """Switch input visibility based on mode."""
-        is_rc = (index == 0)
+        is_rc = index == 0
         self.prop_cols.setVisible(is_rc)
         self.prop_rows.setVisible(is_rc)
         self.prop_width.setVisible(not is_rc)
@@ -615,7 +647,9 @@ class AnnotatePropertyPanel(QWidget):
         self.label_annotated_count = QLabel("0 / 0")
         train_group.add_row(tr("prop.label.annotated"), self.label_annotated_count)
 
-        self.label_model_status = QLabel(tr("prop.label.model_status")) # This might need dynamic update
+        self.label_model_status = QLabel(
+            tr("prop.label.model_status")
+        )  # This might need dynamic update
         train_group.add_row(tr("prop.label.model_status"), self.label_model_status)
 
         layout.addWidget(train_group)
@@ -666,7 +700,7 @@ class PropertyPanel(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        
+
         # Make transparent
         scroll_area.setStyleSheet("background-color: transparent; border: none;")
         scroll_area.viewport().setStyleSheet("background-color: transparent;")
@@ -737,8 +771,14 @@ class PropertyPanel(QWidget):
             theme_name = "dark" if darkdetect.isDark() else "light"
         else:
             theme_name = theme.value.lower()
-            
-        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "property_panel.qss"
+
+        qss_path = (
+            Path(__file__).parent.parent
+            / "resource"
+            / "qss"
+            / theme_name
+            / "property_panel.qss"
+        )
         if qss_path.exists():
-            with open(qss_path, encoding='utf-8') as f:
+            with open(qss_path, encoding="utf-8") as f:
                 self.setStyleSheet(f.read())
