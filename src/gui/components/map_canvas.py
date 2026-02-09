@@ -15,6 +15,7 @@ References
 
 from typing import Optional, Dict, List, Tuple, Any
 from pathlib import Path
+from dataclasses import dataclass
 
 import numpy as np
 import pyqtgraph as pg
@@ -33,19 +34,42 @@ import darkdetect
 try:
     import rasterio
     import rasterio.enums
+
     HAS_RASTERIO = True
 except ImportError:
     HAS_RASTERIO = False
     logger.warning("rasterio not installed. GeoTiff loading will be disabled.")
 
 try:
-    import geopandas as gpd
-    import shapely
-    from shapely.geometry import Polygon, MultiPolygon
-    HAS_GEOPANDAS = True
+    import easyidp as idp
+
+    HAS_EASYIDP = True
 except ImportError:
-    HAS_GEOPANDAS = False
-    logger.warning("geopandas not installed. Vector loading will be disabled.")
+    idp = None
+    HAS_EASYIDP = False
+    logger.warning("easyidp not installed. Vector loading will be disabled.")
+
+
+@dataclass
+class LayerBounds:
+    """Simple bounds container for vector and raster layers.
+
+    Attributes
+    ----------
+    left : float
+        Minimum x coordinate.
+    bottom : float
+        Minimum y coordinate.
+    right : float
+        Maximum x coordinate.
+    top : float
+        Maximum y coordinate.
+    """
+
+    left: float
+    bottom: float
+    right: float
+    top: float
 
 
 class CustomViewBox(pg.ViewBox):
@@ -158,9 +182,9 @@ class MapCanvas(QWidget):
     sigZoomChanged = Signal(float)
     sigRotationChanged = Signal(float)
     sigLayerClicked = Signal(str, float, float)
-    
+
     # New signals for layer panel sync
-    sigLayerAdded = Signal(str, str) # name, type
+    sigLayerAdded = Signal(str, str)  # name, type
     sigLayerRemoved = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -189,7 +213,7 @@ class MapCanvas(QWidget):
 
         # Initialize UI
         self._init_ui()
-        
+
         # Theme handling
         self._update_theme()
         cfg.themeChanged.connect(self._update_theme)
@@ -214,15 +238,15 @@ class MapCanvas(QWidget):
         # Enable mouse tracking for coordinate display
         self._plot_widget.setMouseTracking(True)
         self._proxy = pg.SignalProxy(
-            self._plot_widget.scene().sigMouseMoved, 
-            rateLimit=60, 
-            slot=self._on_mouse_moved
+            self._plot_widget.scene().sigMouseMoved,
+            rateLimit=60,
+            slot=self._on_mouse_moved,
         )
 
         # Hide axes for map-like view
         plot_item = self._plot_widget.getPlotItem()
-        plot_item.hideAxis('left')
-        plot_item.hideAxis('bottom')
+        plot_item.hideAxis("left")
+        plot_item.hideAxis("bottom")
         plot_item.hideButtons()
 
         # Connect view change signal
@@ -284,11 +308,11 @@ class MapCanvas(QWidget):
 
             # Store layer info
             self._layers[layer_name] = {
-                'item': image_item,
-                'dataset': dataset,
-                'filepath': str(filepath),
-                'visible': True,
-                'bounds': dataset.bounds,
+                "item": image_item,
+                "dataset": dataset,
+                "filepath": str(filepath),
+                "visible": True,
+                "bounds": dataset.bounds,
             }
             self._layer_order.append(layer_name)
 
@@ -313,136 +337,151 @@ class MapCanvas(QWidget):
             logger.error(f"Failed to load GeoTiff: {e}")
             return False
 
-    def add_vector_layer(
-        self, 
-        data: Any, 
-        layer_name: str, 
-        color: str = 'g', 
-        width: int = 2
-    ) -> bool:
-        """
-        Add a vector layer (GeoDataFrame or shapefile path).
+    def _normalize_to_roi(self, data: Any) -> Optional[Any]:
+        """Normalize vector input to ``idp.ROI``.
 
         Parameters
         ----------
         data : Any
-            gpd.GeoDataFrame or path to shapefile.
+            Vector source as ROI object or shapefile path.
+
+        Returns
+        -------
+        idp.ROI | None
+            Parsed ROI object when successful.
+        """
+        if not HAS_EASYIDP:
+            logger.error("easyidp not installed")
+            return None
+        roi_cls = getattr(idp, "ROI", None)
+        if roi_cls is None:
+            logger.error("easyidp ROI class not available")
+            return None
+        if isinstance(data, (str, Path)):
+            return roi_cls(str(data))
+        if isinstance(data, roi_cls):
+            return data
+        logger.error(f"Invalid vector data type: {type(data)}")
+        return None
+
+    def _roi_to_plot_arrays(self, roi_data: Any) -> Tuple[np.ndarray, np.ndarray]:
+        """Convert ROI polygons into flattened plotting arrays.
+
+        Parameters
+        ----------
+        roi_data : idp.ROI
+            ROI where each item is ndarray with shape ``(N, 2+)``.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            Flattened x and y arrays separated by ``NaN`` breaks.
+        """
+        x_values: List[float] = []
+        y_values: List[float] = []
+        for coords_raw in roi_data.values():
+            coords_xy = np.asarray(coords_raw)
+            if coords_xy.ndim != 2 or coords_xy.shape[0] < 3:
+                continue
+            x_values.extend(coords_xy[:, 0].tolist())
+            y_values.extend(coords_xy[:, 1].tolist())
+            x_values.append(np.nan)
+            y_values.append(np.nan)
+        return np.asarray(x_values, dtype=float), np.asarray(y_values, dtype=float)
+
+    def _calc_bounds_from_roi(self, roi_data: Any) -> Optional[LayerBounds]:
+        """Calculate layer bounds from ROI coordinates.
+
+        Parameters
+        ----------
+        roi_data : idp.ROI
+            ROI polygon container.
+
+        Returns
+        -------
+        LayerBounds | None
+            Computed bounds or None when ROI is empty.
+        """
+        if len(roi_data) == 0:
+            return None
+        all_coords = [np.asarray(coords)[:, :2] for coords in roi_data.values()]
+        stacked = np.vstack(all_coords)
+        return LayerBounds(
+            left=float(np.min(stacked[:, 0])),
+            bottom=float(np.min(stacked[:, 1])),
+            right=float(np.max(stacked[:, 0])),
+            top=float(np.max(stacked[:, 1])),
+        )
+
+    def add_vector_layer(
+        self, data: Any, layer_name: str, color: str = "g", width: int = 2
+    ) -> bool:
+        """Add vector layer from ROI or shapefile path.
+
+        Parameters
+        ----------
+        data : Any
+            ``idp.ROI`` object or path to shapefile.
         layer_name : str
-            Name for the layer.
-        color : str
-            Color char (e.g. 'r', 'g', 'b', 'k') or hex.
-        width : int
-            Line width.
+            Layer name shown in layer panel.
+        color : str, optional
+            Vector line color.
+        width : int, optional
+            Vector line width in pixels.
 
         Returns
         -------
         bool
-            Success status.
+            True when layer is loaded successfully.
         """
-        if not HAS_GEOPANDAS:
-            logger.error("geopandas not installed")
-            return False
-
         try:
-            # 1. Load data if path
-            if isinstance(data, (str, Path)):
-                gdf = gpd.read_file(data)
-            else:
-                gdf = data
-
-            if not isinstance(gdf, gpd.GeoDataFrame):
-                logger.error(f"Invalid data type for vector layer: {type(gdf)}")
+            roi_data = self._normalize_to_roi(data)
+            if roi_data is None:
                 return False
 
-            # 2. Check CRS and Reproject if needed (TODO: unified CRS management)
-            # For now, assume WGS84 or matching raster if raster loaded.
-            # But MapCanvas doesn't enforce CRS yet. Just display raw coords.
-            
-            # 3. Create Graphic Items
-            items = []
-            
-            # Use QPainterPath for complex geometries or PlotCurveItem for simple lines
-            # PyQtGraph's PlotCurveItem is good for many segments.
-            
-            # Combine all geometries into line segments for efficient drawing
-            all_x = []
-            all_y = []
-            connect = []
-            
-            for geom in gdf.geometry:
-                if geom is None:
-                    continue
-                    
-                if geom.geom_type == 'Polygon':
-                    x, y = geom.exterior.coords.xy
-                    all_x.extend(x)
-                    all_y.extend(y)
-                    # Create connections: 1 for connected, 0 for break
-                    # Last point connects to previous, but next polygon starts new
-                    # Connect array length = len(x)
-                    # 1, 1, ..., 1 (end of geom)
-                    # Actually pg uses connect='all' or array of ints.
-                    # easier: append nan to break line
-                    all_x.append(np.nan)
-                    all_y.append(np.nan)
-                    
-                    # Interiors (holes)
-                    for interior in geom.interiors:
-                         x, y = interior.coords.xy
-                         all_x.extend(x)
-                         all_y.extend(y)
-                         all_x.append(np.nan)
-                         all_y.append(np.nan)
+            x_data, y_data = self._roi_to_plot_arrays(roi_data)
+            if x_data.size == 0:
+                logger.warning("No vector geometry to draw")
+                return False
 
-                elif geom.geom_type == 'MultiPolygon':
-                    for poly in geom.geoms:
-                        x, y = poly.exterior.coords.xy
-                        all_x.extend(x)
-                        all_y.extend(y)
-                        all_x.append(np.nan)
-                        all_y.append(np.nan)
-            
-            # Create PlotCurveItem (lines)
-            if all_x:
-                curve = pg.PlotCurveItem(
-                    x=np.array(all_x), 
-                    y=np.array(all_y), 
-                    pen=pg.mkPen(color=color, width=width),
-                    connect="finite" # Connects finite numbers, breaks on nan
+            bounds = self._calc_bounds_from_roi(roi_data)
+            if bounds is None:
+                return False
+
+            curve = pg.PlotCurveItem(
+                x=x_data,
+                y=y_data,
+                pen=pg.mkPen(color=color, width=width),
+                connect="finite",
+            )
+            curve.setZValue(100)
+
+            if layer_name in self._layers:
+                self.remove_layer(layer_name)
+
+            self._layers[layer_name] = {
+                "item": curve,
+                "data": roi_data,
+                "visible": True,
+                "bounds": bounds,
+            }
+            self._layer_order.append(layer_name)
+            self._item_group.addItem(curve)
+
+            if len(self._layers) == 1:
+                rect = QRectF(
+                    bounds.left,
+                    bounds.bottom,
+                    bounds.right - bounds.left,
+                    bounds.top - bounds.bottom,
                 )
-                curve.setZValue(100) # Vectors on top
-                
-                # Check bounds
-                min_x, min_y, max_x, max_y = gdf.total_bounds
-                bounds = rasterio.coords.BoundingBox(min_x, min_y, max_x, max_y)
-                
-                # Store
-                if layer_name in self._layers:
-                    self.remove_layer(layer_name)
-                    
-                self._layers[layer_name] = {
-                    'item': curve,
-                    'data': gdf,
-                    'visible': True,
-                    'bounds': bounds
-                }
-                self._layer_order.append(layer_name)
-                
-                self._item_group.addItem(curve)
-                
-                # Update view if first layer
-                if len(self._layers) == 1:
-                    rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
-                    self._view_box.setRange(rect)
-                
-                logger.info(f"Loaded vector layer: {layer_name}")
-                self.sigLayerAdded.emit(layer_name, "Vector")
-                return True
-                
-            return False
+                self._view_box.setRange(rect)
 
-        except Exception as e:
-            logger.error(f"Failed to load vector layer: {e}")
+            logger.info(f"Loaded vector layer: {layer_name}")
+            self.sigLayerAdded.emit(layer_name, "Vector")
+            return True
+        except Exception as exc:
+            logger.error(f"Failed to load vector layer: {exc}")
             return False
 
     def remove_layer(self, layer_name: str) -> bool:
@@ -465,13 +504,13 @@ class MapCanvas(QWidget):
         layer_info = self._layers[layer_name]
 
         # Remove item from scene
-        layer_info['item'].setParentItem(None)
-        if layer_info['item'].scene():
-            layer_info['item'].scene().removeItem(layer_info['item'])
+        layer_info["item"].setParentItem(None)
+        if layer_info["item"].scene():
+            layer_info["item"].scene().removeItem(layer_info["item"])
 
         # Close dataset
-        if 'dataset' in layer_info and layer_info['dataset'] is not None:
-            layer_info['dataset'].close()
+        if "dataset" in layer_info and layer_info["dataset"] is not None:
+            layer_info["dataset"].close()
 
         # Remove from registry
         del self._layers[layer_name]
@@ -494,8 +533,8 @@ class MapCanvas(QWidget):
             Whether the layer should be visible.
         """
         if layer_name in self._layers:
-            self._layers[layer_name]['visible'] = visible
-            self._layers[layer_name]['item'].setVisible(visible)
+            self._layers[layer_name]["visible"] = visible
+            self._layers[layer_name]["item"].setVisible(visible)
             logger.debug(f"Layer '{layer_name}' visibility: {visible}")
 
     def update_layer_order(self, order: List[str]) -> None:
@@ -511,7 +550,7 @@ class MapCanvas(QWidget):
         for i, name in enumerate(reversed(order)):
             if name in self._layers:
                 z_value = -100 + i
-                self._layers[name]['item'].setZValue(z_value)
+                self._layers[name]["item"].setZValue(z_value)
         logger.debug(f"Layer order updated: {order}")
 
     def set_rotation(self, angle: float) -> None:
@@ -524,44 +563,44 @@ class MapCanvas(QWidget):
             Rotation angle in degrees.
         """
         self._rotation_angle = angle
-        
+
         # Calculate center of all visible layers
         center = self._get_content_center()
         if center:
             self._item_group.setTransformOriginPoint(center)
-            
+
         self._item_group.setRotation(-angle)
         self.sigRotationChanged.emit(angle)
         logger.debug(f"Rotation set to: {angle}° around {center}")
-        
+
         # Trigger update of visible tiles
         self._update_timer.start()
 
     def get_rotation(self) -> float:
         """Get the current rotation angle."""
         return self._rotation_angle
-        
+
     def _get_content_center(self) -> Optional[QPointF]:
         """Calculate the center of all layers."""
         if not self._layers:
             return None
-            
+
         # If boundary layer exists, use its center
         if "Boundary" in self._layers:
-            bounds = self._layers["Boundary"].get('bounds')
+            bounds = self._layers["Boundary"].get("bounds")
             if bounds:
                 center_x = (bounds.left + bounds.right) / 2
                 center_y = (bounds.bottom + bounds.top) / 2
                 return QPointF(center_x, center_y)
-                
+
         # Otherwise use the first visible layer
         for layer in self._layers.values():
-            if layer['visible'] and 'bounds' in layer:
-                bounds = layer['bounds']
+            if layer["visible"] and "bounds" in layer:
+                bounds = layer["bounds"]
                 center_x = (bounds.left + bounds.right) / 2
                 center_y = (bounds.bottom + bounds.top) / 2
                 return QPointF(center_x, center_y)
-                
+
         return None
 
     def set_mode(self, mode: int) -> None:
@@ -592,8 +631,8 @@ class MapCanvas(QWidget):
         # Calculate approximate zoom level
         if self._layers:
             first_layer = next(iter(self._layers.values()))
-            if 'bounds' in first_layer:
-                b = first_layer['bounds']
+            if "bounds" in first_layer:
+                b = first_layer["bounds"]
                 full_width = b.right - b.left
                 visible_width = view_rect.width()
                 if visible_width > 0:
@@ -608,18 +647,16 @@ class MapCanvas(QWidget):
         view_rect = self._view_box.viewRect()
 
         for name, layer_info in self._layers.items():
-            if not layer_info['visible']:
+            if not layer_info["visible"]:
                 continue
 
-            dataset = layer_info.get('dataset')
+            dataset = layer_info.get("dataset")
             if dataset is None:
                 continue
 
             self._load_visible_region(layer_info, view_rect)
 
-    def _load_visible_region(
-        self, layer_info: Dict, view_rect: QRectF
-    ) -> None:
+    def _load_visible_region(self, layer_info: Dict, view_rect: QRectF) -> None:
         """
         Load the visible region of a raster layer.
 
@@ -630,12 +667,12 @@ class MapCanvas(QWidget):
         view_rect : QRectF
             Current visible rectangle in geo coordinates.
         """
-        dataset = layer_info['dataset']
-        image_item = layer_info['item']
+        dataset = layer_info["dataset"]
+        image_item = layer_info["item"]
 
         # Calculate visible rect in ItemGroup coordinates (Geo coords, rotated)
         view_rect = self._view_box.viewRect()
-        
+
         # Use simple mapping if no rotation or manual transform if rotated
         if self._rotation_angle == 0:
             bbox = view_rect
@@ -643,10 +680,10 @@ class MapCanvas(QWidget):
             center = self._item_group.transformOriginPoint()
             transform = QTransform()
             transform.translate(center.x(), center.y())
-            transform.rotate(self._rotation_angle) # Inverse of -angle
+            transform.rotate(self._rotation_angle)  # Inverse of -angle
             transform.translate(-center.x(), -center.y())
             bbox = transform.mapRect(view_rect)
-        
+
         geo_left = bbox.left()
         geo_right = bbox.right()
         geo_bottom = bbox.top()
@@ -655,15 +692,20 @@ class MapCanvas(QWidget):
         try:
             # Convert geo coordinates to rasterio window
             # Ensure proper ordering for rasterio (bottom < top) (Y-up logic)
-            
-            w_left, w_bottom, w_right, w_top = bbox.left(), bbox.top(), bbox.right(), bbox.bottom()
-            
+
+            w_left, w_bottom, w_right, w_top = (
+                bbox.left(),
+                bbox.top(),
+                bbox.right(),
+                bbox.bottom(),
+            )
+
             # Use min/max to be safe regardless of axis direction assumptions
             r_left = min(w_left, w_right)
             r_right = max(w_left, w_right)
             r_bottom = min(w_bottom, w_top)
             r_top = max(w_bottom, w_top)
-            
+
             # Pad the window slightly to avoid edge artifacts during rotation
             # padding = max(r_right - r_left, r_top - r_bottom) * 0.05
             # r_left -= padding
@@ -694,10 +736,12 @@ class MapCanvas(QWidget):
                 window=window,
                 out_shape=target_shape,
                 resampling=rasterio.enums.Resampling.nearest,
-                boundless=True
+                boundless=True,
             )
-            
-            logger.debug(f"Read data shape: {data.shape}, Range: {data.min()} - {data.max()}")
+
+            logger.debug(
+                f"Read data shape: {data.shape}, Range: {data.min()} - {data.max()}"
+            )
 
             # Transpose from (B, H, W) to (W, H, B) for pyqtgraph (x, y, c)
             if data.ndim == 3:
@@ -712,17 +756,17 @@ class MapCanvas(QWidget):
                 elif data.shape[2] >= 3:
                     # RGB or more - take first 3 channels
                     data = data[:, :, :3]
-            
+
             # Simple normalization if data is typically 16-bit or not 0-255
             # This is a basic check. For now just log.
             if data.dtype != np.uint8:
-                 # logger.debug(f"Data type is {data.dtype}, normalizing for display")
-                 # Normalize to 0-255 for display if not uint8
-                 # This might be slow for real-time, but good for testing visibility
-                 if data.max() > 0:
-                     data = (data / data.max() * 255).astype(np.uint8)
-                 else:
-                     data = data.astype(np.uint8)
+                # logger.debug(f"Data type is {data.dtype}, normalizing for display")
+                # Normalize to 0-255 for display if not uint8
+                # This might be slow for real-time, but good for testing visibility
+                if data.max() > 0:
+                    data = (data / data.max() * 255).astype(np.uint8)
+                else:
+                    data = data.astype(np.uint8)
 
             # Update image item
             image_item.clear()
@@ -730,10 +774,7 @@ class MapCanvas(QWidget):
 
             # Set correct geo position
             img_rect = QRectF(
-                geo_left,
-                geo_bottom,
-                geo_right - geo_left,
-                geo_top - geo_bottom
+                geo_left, geo_bottom, geo_right - geo_left, geo_top - geo_bottom
             )
             image_item.setRect(img_rect)
             # logger.debug(f"Image updated. Rect: {img_rect}")
@@ -777,7 +818,7 @@ class MapCanvas(QWidget):
         if layer_name not in self._layers:
             return
 
-        bounds = self._layers[layer_name]['bounds']
+        bounds = self._layers[layer_name]["bounds"]
         if bounds:
             width = bounds.right - bounds.left
             height = bounds.top - bounds.bottom
@@ -799,9 +840,9 @@ class MapCanvas(QWidget):
         # Determine base extent (first layer or boundary)
         # TODO: Ideally should cache this base extent
         first_layer = next(iter(self._layers.values()))
-        if 'bounds' not in first_layer:
+        if "bounds" not in first_layer:
             return
-            
+
     def _update_theme(self):
         """Update canvas theme (background color)."""
         theme = cfg.themeMode.value
@@ -810,21 +851,16 @@ class MapCanvas(QWidget):
             is_dark = darkdetect.isDark()
         else:
             is_dark = theme == Theme.DARK
-            
+
         if is_dark:
-            bg_color = '#272727' # Match typical dark theme bg
-            fg_color = '#FFFFFF'
+            bg_color = "#272727"  # Match typical dark theme bg
+            fg_color = "#FFFFFF"
         else:
-            bg_color = '#FFFFFF'
-            fg_color = '#000000'
-            
+            bg_color = "#FFFFFF"
+            fg_color = "#000000"
+
         self._plot_widget.setBackground(bg_color)
         # Axes are hidden, so we don't strictly need to update their pen
         # If needed in future: self._plot_widget.getPlotItem().getAxis('left').setPen(fg_color)
-        
+
         logger.debug(f"MapCanvas theme updated. Dark: {is_dark}")
-            
-
-        
-
-

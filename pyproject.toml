@@ -12,7 +12,6 @@ dependencies = [
     "pyqtgraph>=0.13.7",
     "PySide6-Fluent-Widgets>=1.7.0",
     # GIS data processing
-    "geopandas>=1.1.1",
     "rasterio>=1.4.3",
     "shapely>=2.0.0",
     # Scientific computing
