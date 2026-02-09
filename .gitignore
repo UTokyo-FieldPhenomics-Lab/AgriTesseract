@@ -8,5 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
-/dev.notes/files
+/tests/out
+/tests/files
+
+# App generated configs
 config.json
