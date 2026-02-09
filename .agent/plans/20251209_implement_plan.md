@@ -8,7 +8,6 @@
 ## 项目架构概述
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial' }}}%%
 flowchart TB
     subgraph UI["🖥️ UI Layer - Ribbon Style"]
         direction LR
