@@ -1,31 +1,47 @@
-"""Seedling detection tab with Office-style top tabs."""
+"""Seedling detection tab with Fluent SegmentedWidget top tabs."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
-    QFormLayout,
     QHBoxLayout,
-    QLabel,
-    QTabWidget,
+    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 from qfluentwidgets import (
+    Action,
+    BodyLabel,
+    CommandBar,
     DoubleSpinBox,
+    FluentIcon as FIF,
     InfoBar,
     LineEdit,
+    SegmentedWidget,
     PrimaryPushButton,
     PushButton,
     SpinBox,
+    qrouter,
 )
 
-from src.gui.components.base_interface import PageGroup, TabInterface
+from src.gui.components.base_interface import TabInterface
 from src.gui.config import cfg, tr
+
+
+def seedling_top_tab_keys() -> tuple[str, ...]:
+    """Return ordered i18n keys for seedling top tabs."""
+    return (
+        "page.seedling.tab.file",
+        "page.seedling.tab.sam3_params",
+        "page.seedling.tab.sam3_preview",
+        "page.seedling.tab.slice_infer",
+        "page.seedling.tab.points",
+    )
 
 
 class SeedlingTab(TabInterface):
@@ -48,163 +64,285 @@ class SeedlingTab(TabInterface):
         )
 
     def _init_controls(self) -> None:
-        """Initialize Office-style tab control area."""
-        office_group = PageGroup(tr("page.seedling.group.office"))
-        office_group.add_widget(self._build_top_tabs())
-        self.add_group(office_group)
-        self.add_stretch()
+        """Initialize Fluent tab controls."""
+        top_tabs_widget = self._build_top_tabs()
+        top_tabs_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self._tool_layout.addWidget(top_tabs_widget, 1)
         self.property_panel.set_current_tab(1)
 
     def _build_top_tabs(self) -> QWidget:
-        """Build top tab widget container."""
+        """Build top tab (SegmentedWidget | Pivot) and stacked content container."""
         container = QWidget()
-        container.setMinimumWidth(920)
+        container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(6, 0, 6, 0)
         layout.setSpacing(4)
 
-        self.top_tabs = QTabWidget()
-        self.tab_file = self._build_file_tab()
-        self.tab_sam3 = self._build_sam3_tab()
-        self.tab_points = self._build_points_tab()
-        self.top_tabs.addTab(self.tab_file, tr("page.seedling.tab.file"))
-        self.top_tabs.addTab(self.tab_sam3, tr("page.seedling.tab.sam3"))
-        self.top_tabs.addTab(self.tab_points, tr("page.seedling.tab.points"))
-        layout.addWidget(self.top_tabs)
+        self.nav = SegmentedWidget(self)  # change to Pivot() if necessary
+        self.stacked_widget = QStackedWidget(self)
+        tab_definitions = [
+            ("seedlingFileTab", self._build_file_tab(), seedling_top_tab_keys()[0]),
+            (
+                "seedlingSam3ParamsTab",
+                self._build_sam3_params_tab(),
+                seedling_top_tab_keys()[1],
+            ),
+            (
+                "seedlingSam3PreviewTab",
+                self._build_sam3_preview_tab(),
+                seedling_top_tab_keys()[2],
+            ),
+            (
+                "seedlingSliceInferTab",
+                self._build_slice_infer_tab(),
+                seedling_top_tab_keys()[3],
+            ),
+            (
+                "seedlingPointsTab",
+                self._build_points_tab(),
+                seedling_top_tab_keys()[4],
+            ),
+        ]
+        self.tab_file = tab_definitions[0][1]
+        for route_key, widget, text_key in tab_definitions:
+            self._add_sub_tab(widget, route_key, tr(text_key))
+
+        self.stacked_widget.currentChanged.connect(self._on_tab_changed)
+        self.stacked_widget.setCurrentWidget(self.tab_file)
+        self.nav.setCurrentItem(self.tab_file.objectName())
+        qrouter.setDefaultRouteKey(self.stacked_widget, self.tab_file.objectName())
+
+        self.nav.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.nav)
+        layout.addWidget(self.stacked_widget)
         return container
 
-    def _build_file_tab(self) -> QWidget:
-        """Build DOM file tab content."""
-        tab = QWidget()
-        layout = QHBoxLayout(tab)
-        layout.setContentsMargins(8, 6, 8, 6)
+    def _add_sub_tab(self, widget: QWidget, route_key: str, text: str) -> None:
+        """Register one top tab and its stacked page."""
+        widget.setObjectName(route_key)
+        self.stacked_widget.addWidget(widget)
+        self.nav.addItem(
+            routeKey=route_key,
+            text=text,
+            onClick=lambda: self.stacked_widget.setCurrentWidget(widget),
+        )
 
+    @Slot(int)
+    def _on_tab_changed(self, index: int) -> None:
+        """Sync top tab selection when stacked page changed."""
+        widget = self.stacked_widget.widget(index)
+        if widget is None:
+            return
+        self.nav.setCurrentItem(widget.objectName())
+        qrouter.push(self.stacked_widget, widget.objectName())
+
+    def _build_file_tab(self) -> QWidget:
+        """Build file tab command bar."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        bar = self._new_command_bar()
         self.btn_load_dom = PushButton(tr("page.seedling.btn.load_dom"))
         self.btn_load_dom.clicked.connect(self._on_load_dom)
-        layout.addWidget(self.btn_load_dom)
+        self.label_dom = BodyLabel(tr("page.seedling.label.no_dom"))
+        self.label_dom.setMinimumWidth(280)
 
-        self.label_dom = QLabel(tr("page.seedling.label.no_dom"))
-        self.label_dom.setMinimumWidth(380)
-        layout.addWidget(self.label_dom)
-        layout.addStretch()
+        bar.addAction(Action(FIF.ROBOT, tr("page.seedling.group.sam")))
+        bar.addSeparator()
+        bar.addWidget(self.btn_load_dom)
+        bar.addSeparator()
+        bar.addWidget(self.label_dom)
+        bar.addWidget(self._bar_spacer())
+        layout.addWidget(bar)
         return tab
 
-    def _build_sam3_tab(self) -> QWidget:
-        """Build SAM3 parameter and execution tab."""
-        tab = QWidget()
-        layout = QHBoxLayout(tab)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(12)
+    def _new_command_bar(self) -> CommandBar:
+        """Create command bar with fluent display style."""
+        bar = CommandBar(self)
+        bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        return bar
 
-        layout.addLayout(self._build_model_panel())
-        layout.addLayout(self._build_preview_panel())
-        layout.addLayout(self._build_execute_panel())
-        layout.addLayout(self._build_cache_panel())
-        layout.addStretch()
+    def _bar_spacer(self) -> QWidget:
+        """Create expanding spacer widget for command bars."""
+        spacer = QWidget(self)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        return spacer
+
+    def _build_labeled_spin(self, label_key: str, widget: QWidget) -> QWidget:
+        """Wrap one label-control pair in horizontal layout."""
+        wrapper = QWidget()
+        wrapper.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(BodyLabel(tr(label_key)))
+        layout.addWidget(widget)
+        return wrapper
+
+    def _build_sam3_params_tab(self) -> QWidget:
+        """Build SAM3 parameter tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        bar = self._new_command_bar()
+        bar.addWidget(self._build_model_section())
+        bar.addWidget(self._bar_spacer())
+        layout.addWidget(bar)
+        return tab
+
+    def _build_sam3_preview_tab(self) -> QWidget:
+        """Build SAM3 preview inference tab."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        bar = self._new_command_bar()
+        bar.addWidget(self._build_preview_section())
+        bar.addWidget(self._bar_spacer())
+        layout.addWidget(bar)
+        return tab
+
+    def _build_slice_infer_tab(self) -> QWidget:
+        """Build slice inference tab with cache actions."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        bar = self._new_command_bar()
+        bar.addWidget(self._build_execute_section())
+        bar.addSeparator()
+        bar.addWidget(self._build_cache_section())
+        bar.addWidget(self._bar_spacer())
+        layout.addWidget(bar)
         return tab
 
     def _build_points_tab(self) -> QWidget:
-        """Build point editing and export tab."""
+        """Build point tab with command bar sections."""
         tab = QWidget()
-        layout = QHBoxLayout(tab)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        bar = self._new_command_bar()
 
         self.btn_view = PushButton(tr("page.seedling.btn.view"))
         self.btn_view.setCheckable(True)
         self.btn_view.setChecked(True)
-        layout.addWidget(self.btn_view)
+        bar.addWidget(self.btn_view)
 
         self.btn_add = PushButton(tr("page.seedling.btn.add"))
         self.btn_add.setCheckable(True)
-        layout.addWidget(self.btn_add)
+        bar.addWidget(self.btn_add)
 
         self.btn_move = PushButton(tr("page.seedling.btn.move"))
         self.btn_move.setCheckable(True)
-        layout.addWidget(self.btn_move)
+        bar.addWidget(self.btn_move)
 
         self.btn_delete = PushButton(tr("page.seedling.btn.delete"))
         self.btn_delete.setCheckable(True)
-        layout.addWidget(self.btn_delete)
+        bar.addWidget(self.btn_delete)
+
+        bar.addSeparator()
 
         self.btn_undo = PushButton(tr("page.seedling.btn.undo"))
-        layout.addWidget(self.btn_undo)
+        bar.addWidget(self.btn_undo)
+
+        bar.addSeparator()
 
         self.btn_save_points = PrimaryPushButton(tr("page.common.save"))
         self.btn_save_points.clicked.connect(self.sigSavePoints.emit)
-        layout.addWidget(self.btn_save_points)
-        layout.addStretch()
+        bar.addWidget(self.btn_save_points)
+        bar.addWidget(self._bar_spacer())
+        layout.addWidget(bar)
         return tab
 
-    def _build_model_panel(self) -> QFormLayout:
-        """Build model parameter controls."""
-        form = QFormLayout()
+    def _build_model_section(self) -> QWidget:
+        """Build model parameter section widget."""
         self.edit_prompt = LineEdit()
         self.edit_prompt.setText("plants")
-        form.addRow(tr("page.seedling.label.prompt"), self.edit_prompt)
-
         self.spin_conf = DoubleSpinBox()
         self.spin_conf.setRange(0.01, 1.0)
         self.spin_conf.setValue(0.5)
         self.spin_conf.setSingleStep(0.05)
-        form.addRow(tr("prop.label.confidence"), self.spin_conf)
-
         self.spin_iou = DoubleSpinBox()
         self.spin_iou.setRange(0.01, 0.95)
         self.spin_iou.setValue(0.4)
         self.spin_iou.setSingleStep(0.05)
-        form.addRow(tr("prop.label.nms_iou"), self.spin_iou)
-        return form
+        wrapper = QWidget()
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(
+            self._build_labeled_spin("page.seedling.label.prompt", self.edit_prompt)
+        )
+        layout.addWidget(
+            self._build_labeled_spin("prop.label.confidence", self.spin_conf)
+        )
+        layout.addWidget(self._build_labeled_spin("prop.label.nms_iou", self.spin_iou))
+        return wrapper
 
-    def _build_preview_panel(self) -> QFormLayout:
-        """Build preview region controls."""
-        form = QFormLayout()
+    def _build_preview_section(self) -> QWidget:
+        """Build preview region section widget."""
         self.spin_preview_size = SpinBox()
         self.spin_preview_size.setRange(128, 2048)
         self.spin_preview_size.setValue(640)
         self.spin_preview_size.setSingleStep(32)
-        form.addRow(tr("page.seedling.label.preview_size"), self.spin_preview_size)
-
         self.btn_pick_preview = PushButton(tr("page.seedling.btn.pick_preview"))
-        form.addRow("", self.btn_pick_preview)
-
         self.btn_preview_detect = PrimaryPushButton(
             tr("page.seedling.btn.preview_detect")
         )
         self.btn_preview_detect.clicked.connect(self.sigPreviewDetect.emit)
-        form.addRow("", self.btn_preview_detect)
-        return form
+        wrapper = QWidget()
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(
+            self._build_labeled_spin(
+                "page.seedling.label.preview_size", self.spin_preview_size
+            )
+        )
+        layout.addWidget(self.btn_pick_preview)
+        layout.addWidget(self.btn_preview_detect)
+        return wrapper
 
-    def _build_execute_panel(self) -> QFormLayout:
-        """Build full-image slicing execution controls."""
-        form = QFormLayout()
+    def _build_execute_section(self) -> QWidget:
+        """Build full-image slicing section widget."""
         self.spin_slice_size = SpinBox()
         self.spin_slice_size.setRange(256, 2048)
         self.spin_slice_size.setValue(640)
         self.spin_slice_size.setSingleStep(64)
-        form.addRow(tr("page.seedling.label.size"), self.spin_slice_size)
-
         self.spin_overlap = DoubleSpinBox()
         self.spin_overlap.setRange(0.0, 0.8)
         self.spin_overlap.setValue(0.2)
         self.spin_overlap.setSingleStep(0.05)
-        form.addRow(tr("page.seedling.label.overlap"), self.spin_overlap)
-
         self.btn_full_detect = PrimaryPushButton(tr("page.seedling.btn.detect"))
         self.btn_full_detect.clicked.connect(self.sigFullDetect.emit)
-        form.addRow("", self.btn_full_detect)
-        return form
+        wrapper = QWidget()
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(
+            self._build_labeled_spin("page.seedling.label.size", self.spin_slice_size)
+        )
+        layout.addWidget(
+            self._build_labeled_spin("page.seedling.label.overlap", self.spin_overlap)
+        )
+        layout.addWidget(self.btn_full_detect)
+        return wrapper
 
-    def _build_cache_panel(self) -> QFormLayout:
-        """Build cache save/load controls."""
-        form = QFormLayout()
+    def _build_cache_section(self) -> QWidget:
+        """Build save/load cache section widget."""
         self.btn_save_cache = PushButton(tr("page.seedling.btn.save_cache"))
         self.btn_save_cache.clicked.connect(self.sigSaveCache.emit)
-        form.addRow("", self.btn_save_cache)
-
         self.btn_load_cache = PushButton(tr("page.seedling.btn.load_cache"))
         self.btn_load_cache.clicked.connect(self.sigLoadCache.emit)
-        form.addRow("", self.btn_load_cache)
-        return form
+        wrapper = QWidget()
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(self.btn_save_cache)
+        layout.addWidget(self.btn_load_cache)
+        return wrapper
 
     @Slot()
     def _on_load_dom(self) -> None:
