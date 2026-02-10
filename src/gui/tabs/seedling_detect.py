@@ -53,14 +53,43 @@ class SeedlingTab(TabInterface):
     sigSaveCache = Signal()
     sigLoadCache = Signal()
     sigSavePoints = Signal()
+    sigPreviewModeToggled = Signal(bool)
+    sigPreviewSizeRequested = Signal(int)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._dom_path: str = ""
         self._init_controls()
+        self._connect_preview_interaction()
         self._apply_weight_availability()
         cfg.sam3WeightPath.valueChanged.connect(
             lambda _: self._apply_weight_availability()
+        )
+
+    def _connect_preview_interaction(self) -> None:
+        """Connect preview controls with map canvas interactions."""
+        map_canvas = self.map_component.map_canvas
+        self.sigPreviewModeToggled.connect(map_canvas.set_preview_mode_enabled)
+        self.sigPreviewSizeRequested.connect(map_canvas.set_preview_box_size)
+        map_canvas.sigPreviewSizeChanged.connect(self.sync_preview_size)
+        map_canvas.sigPreviewBoxLocked.connect(self._on_preview_locked)
+        map_canvas.set_preview_box_size(self.spin_preview_size.value())
+
+    @Slot(float, float, float, float)
+    def _on_preview_locked(
+        self,
+        x_min: float,
+        y_min: float,
+        x_max: float,
+        y_max: float,
+    ) -> None:
+        """Show short status when preview area is locked."""
+        _ = (x_min, y_min, x_max, y_max)
+        InfoBar.success(
+            title=tr("success"),
+            content=tr("page.seedling.msg.preview_locked"),
+            parent=self,
+            duration=1500,
         )
 
     def _init_controls(self) -> None:
@@ -288,10 +317,13 @@ class SeedlingTab(TabInterface):
         self.spin_preview_size.setValue(640)
         self.spin_preview_size.setSingleStep(32)
         self.btn_pick_preview = PushButton(tr("page.seedling.btn.pick_preview"))
+        self.btn_pick_preview.setCheckable(True)
+        self.btn_pick_preview.toggled.connect(self._on_pick_preview_toggled)
         self.btn_preview_detect = PrimaryPushButton(
             tr("page.seedling.btn.preview_detect")
         )
         self.btn_preview_detect.clicked.connect(self.sigPreviewDetect.emit)
+        self.spin_preview_size.valueChanged.connect(self.sigPreviewSizeRequested.emit)
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -304,6 +336,25 @@ class SeedlingTab(TabInterface):
         layout.addWidget(self.btn_pick_preview)
         layout.addWidget(self.btn_preview_detect)
         return wrapper
+
+    @Slot(int)
+    def sync_preview_size(self, size: int) -> None:
+        """Sync preview size from canvas shortcut events."""
+        if self.spin_preview_size.value() == size:
+            return
+        self.spin_preview_size.blockSignals(True)
+        self.spin_preview_size.setValue(size)
+        self.spin_preview_size.blockSignals(False)
+        self.sigPreviewSizeRequested.emit(size)
+
+    @Slot(bool)
+    def _on_pick_preview_toggled(self, checked: bool) -> None:
+        """Update pick-preview button visual state and emit mode signal."""
+        if checked:
+            self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview_stop"))
+        else:
+            self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
+        self.sigPreviewModeToggled.emit(checked)
 
     def _build_execute_section(self) -> QWidget:
         """Build full-image slicing section widget."""
@@ -357,7 +408,28 @@ class SeedlingTab(TabInterface):
             return
         self._dom_path = file_path
         self.label_dom.setText(Path(file_path).name)
+        self._load_dom_to_canvas(file_path)
         self.sigLoadDom.emit(file_path)
+
+    def _load_dom_to_canvas(self, file_path: str) -> None:
+        """Load selected DOM into map canvas and update user feedback."""
+        map_canvas = self.map_component.map_canvas
+        is_ok = map_canvas.add_raster_layer(file_path)
+        if not is_ok:
+            InfoBar.error(
+                title=tr("error"),
+                content=f"Failed to load DOM: {Path(file_path).name}",
+                parent=self,
+                duration=3500,
+            )
+            return
+        map_canvas.zoom_to_layer(Path(file_path).stem)
+        InfoBar.success(
+            title=tr("success"),
+            content=f"Loaded DOM: {Path(file_path).name}",
+            parent=self,
+            duration=1800,
+        )
 
     def _apply_weight_availability(self) -> None:
         """Enable or disable SAM3 controls by weight availability."""

@@ -77,6 +77,7 @@
     "page.seedling.label.prompt": "Prompt:",
     "page.seedling.label.preview_size": "Preview Size:",
     "page.seedling.btn.pick_preview": "Pick Preview",
+    "page.seedling.btn.pick_preview_stop": "Stop Picking",
     "page.seedling.btn.preview_detect": "Run Preview",
     "page.seedling.btn.save_cache": "Save Cache",
     "page.seedling.btn.load_cache": "Load Cache",
@@ -92,6 +93,7 @@
     "page.seedling.btn.undo": "Undo",
     "page.seedling.group.save": "Save",
     "page.seedling.msg.weight_unavailable": "SAM3 weight unavailable. Apply from Meta and set it in Settings",
+    "page.seedling.msg.preview_locked": "Preview area locked",
 
     "page.rename.group.ridge": "Ridge Detect",
     "page.rename.label.direction": "Direction:",

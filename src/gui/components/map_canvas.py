@@ -25,9 +25,14 @@ import pyqtgraph as pg
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
-from PySide6.QtGui import QWheelEvent, QPolygonF, QTransform
+from PySide6.QtGui import QKeyEvent, QPolygonF, QTransform, QWheelEvent
 from loguru import logger
 from src.gui.config import cfg
+from src.utils.seedling_preview import (
+    clamp_preview_size,
+    pixel_square_bounds_from_geo_center,
+    preview_bounds_from_center,
+)
 from qfluentwidgets import Theme, isDarkTheme
 import darkdetect
 
@@ -115,7 +120,7 @@ class CustomViewBox(pg.ViewBox):
         else:
             self.setMouseMode(pg.ViewBox.RectMode)
 
-    def mouseDragEvent(self, ev) -> None:
+    def mouseDragEvent(self, ev, *, axis=None) -> None:
         """Handle mouse drag events."""
         if self._current_mode == self.MODE_PAN:
             ev.accept()
@@ -132,7 +137,7 @@ class CustomViewBox(pg.ViewBox):
             self.setRange(current_rect, padding=0)
         else:
             ev.ignore()
-            super().mouseDragEvent(ev)
+            super().mouseDragEvent(ev, axis=axis)
 
     def mouseClickEvent(self, ev) -> None:
         """Handle mouse click events."""
@@ -182,6 +187,8 @@ class MapCanvas(QWidget):
     sigZoomChanged = Signal(float)
     sigRotationChanged = Signal(float)
     sigLayerClicked = Signal(str, float, float)
+    sigPreviewBoxLocked = Signal(float, float, float, float)
+    sigPreviewSizeChanged = Signal(int)
 
     # New signals for layer panel sync
     sigLayerAdded = Signal(str, str)  # name, type
@@ -204,6 +211,10 @@ class MapCanvas(QWidget):
 
         # Current rotation angle
         self._rotation_angle: float = 0.0
+        self._preview_mode_enabled: bool = False
+        self._preview_box_size: int = 640
+        self._preview_hover_center: Optional[Tuple[float, float]] = None
+        self._preview_locked_center: Optional[Tuple[float, float]] = None
 
         # Debounce timer for view updates
         self._update_timer = QTimer()
@@ -228,7 +239,7 @@ class MapCanvas(QWidget):
         # Create custom ViewBox
         self._view_box = CustomViewBox()
         self._view_box.sigClicked.connect(self._on_canvas_clicked)
-        # self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover) # Using SignalProxy instead
+        self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover)
 
         # Create PlotWidget with custom ViewBox
         self._plot_widget = pg.PlotWidget(viewBox=self._view_box)
@@ -237,6 +248,7 @@ class MapCanvas(QWidget):
 
         # Enable mouse tracking for coordinate display
         self._plot_widget.setMouseTracking(True)
+        self._plot_widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._proxy = pg.SignalProxy(
             self._plot_widget.scene().sigMouseMoved,
             rateLimit=60,
@@ -261,6 +273,14 @@ class MapCanvas(QWidget):
         # Create primary image item for raster display
         self._image_item = pg.ImageItem()
         self._item_group.addItem(self._image_item)
+
+        self._preview_box_item = pg.PlotCurveItem(
+            pen=pg.mkPen(color="#00AAFF", width=2, style=Qt.PenStyle.DashLine),
+            connect="finite",
+        )
+        self._preview_box_item.setVisible(False)
+        self._preview_box_item.setZValue(500)
+        self._item_group.addItem(self._preview_box_item)
 
     def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:
         """
@@ -787,14 +807,144 @@ class MapCanvas(QWidget):
         pos = evt[0]
         if self._plot_widget.sceneBoundingRect().contains(pos):
             mouse_point = self._view_box.mapSceneToView(pos)
-            self.sigCoordinateChanged.emit(mouse_point.x(), mouse_point.y())
+            self._on_coordinate_hover(mouse_point.x(), mouse_point.y())
+
+    def _on_coordinate_hover(self, x_coord: float, y_coord: float) -> None:
+        """Update coordinate and preview overlay on mouse hover."""
+        self.sigCoordinateChanged.emit(x_coord, y_coord)
+        if not self._preview_mode_enabled:
+            return
+        item_pos = self._item_group.mapFromParent(QPointF(x_coord, y_coord))
+        self._preview_hover_center = (item_pos.x(), item_pos.y())
+        self._update_preview_overlay()
 
     def _on_canvas_clicked(self, ev) -> None:
         """Handle canvas click events."""
         pos = self._view_box.mapToView(ev.pos())
         item_pos = self._item_group.mapFromParent(pos)
+        if self._preview_mode_enabled and ev.button() == Qt.MouseButton.LeftButton:
+            self._preview_locked_center = (item_pos.x(), item_pos.y())
+            self._update_preview_overlay()
+            self.sigPreviewBoxLocked.emit(*self._preview_bounds())
+            return
         self.sigLayerClicked.emit("", item_pos.x(), item_pos.y())
         logger.debug(f"Canvas clicked at: ({item_pos.x():.2f}, {item_pos.y():.2f})")
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle preview size shortcuts in preview mode."""
+        if not self._preview_mode_enabled:
+            super().keyPressEvent(event)
+            return
+        if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.adjust_preview_box_size(delta=32)
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Minus:
+            self.adjust_preview_box_size(delta=-32)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def set_preview_mode_enabled(self, enabled: bool) -> None:
+        """Enable or disable preview-box interaction mode."""
+        self._preview_mode_enabled = enabled
+        self._ensure_preview_layer_registered()
+        if enabled:
+            self._update_preview_overlay()
+            return
+        self._preview_hover_center = None
+        self._preview_locked_center = None
+        self._preview_box_item.setVisible(False)
+
+    def set_preview_box_size(self, size: int) -> None:
+        """Set preview box size and refresh overlay."""
+        clamped_size = clamp_preview_size(size)
+        if clamped_size == self._preview_box_size:
+            return
+        self._preview_box_size = clamped_size
+        self.sigPreviewSizeChanged.emit(clamped_size)
+        self._update_preview_overlay()
+
+    def adjust_preview_box_size(self, delta: int) -> None:
+        """Adjust preview box size by delta pixels."""
+        self.set_preview_box_size(self._preview_box_size + delta)
+
+    def preview_box_size(self) -> int:
+        """Return current preview box size in pixels."""
+        return self._preview_box_size
+
+    def clear_preview_box_lock(self) -> None:
+        """Clear locked preview center and redraw hover box."""
+        self._preview_locked_center = None
+        self._update_preview_overlay()
+
+    def _preview_bounds(self) -> tuple[float, float, float, float]:
+        """Get current preview bounds from active center."""
+        center_xy = self._preview_locked_center or self._preview_hover_center
+        if center_xy is None:
+            return 0.0, 0.0, 0.0, 0.0
+        active_dataset = self._active_raster_dataset()
+        if active_dataset is None:
+            return preview_bounds_from_center(
+                center_xy[0], center_xy[1], int(self._preview_box_size)
+            )
+        return pixel_square_bounds_from_geo_center(
+            center_x=center_xy[0],
+            center_y=center_xy[1],
+            size_px=self._preview_box_size,
+            transform=active_dataset.transform,
+        )
+
+    def _active_raster_dataset(self):
+        """Get top-most visible raster dataset for preview conversion."""
+        for layer_name in reversed(self._layer_order):
+            layer_info = self._layers.get(layer_name, {})
+            if not layer_info.get("visible", False):
+                continue
+            dataset = layer_info.get("dataset")
+            if dataset is None:
+                continue
+            return dataset
+        return None
+
+    def _ensure_preview_layer_registered(self) -> None:
+        """Register preview overlay into layer tree as vector layer."""
+        preview_name = "Preview"
+        if self._preview_box_item.parentItem() is None:
+            self._item_group.addItem(self._preview_box_item)
+        if preview_name in self._layers:
+            return
+        self._layers[preview_name] = {
+            "item": self._preview_box_item,
+            "visible": True,
+            "bounds": None,
+            "is_preview": True,
+        }
+        self._layer_order.append(preview_name)
+        self.sigLayerAdded.emit(preview_name, "Vector")
+
+    def _update_preview_overlay(self) -> None:
+        """Update preview box polyline rendering."""
+        if not self._preview_mode_enabled:
+            self._preview_box_item.setVisible(False)
+            return
+        center_xy = self._preview_locked_center or self._preview_hover_center
+        if center_xy is None:
+            self._preview_box_item.setVisible(False)
+            return
+        x_min, y_min, x_max, y_max = self._preview_bounds()
+        x_values = np.asarray([x_min, x_max, x_max, x_min, x_min], dtype=float)
+        y_values = np.asarray([y_min, y_min, y_max, y_max, y_min], dtype=float)
+        self._preview_box_item.setData(x=x_values, y=y_values)
+        preview_layer = self._layers.get("Preview")
+        if preview_layer is not None:
+            preview_layer["bounds"] = LayerBounds(
+                left=x_min,
+                bottom=y_min,
+                right=x_max,
+                top=y_max,
+            )
+        self._preview_box_item.setVisible(True)
 
     def cleanup(self) -> None:
         """Clean up resources (close file handles)."""
