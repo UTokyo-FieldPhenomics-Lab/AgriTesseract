@@ -1,15 +1,14 @@
-
 from enum import Enum
 from PySide6.QtCore import QLocale, QObject, Signal
 from qfluentwidgets import (
-    QConfig, 
-    qconfig, 
+    QConfig,
+    qconfig,
     ConfigItem,
     FolderValidator,
-    OptionsConfigItem, 
-    OptionsValidator, 
+    OptionsConfigItem,
+    OptionsValidator,
     EnumSerializer,
-    Theme
+    Theme,
 )
 
 from loguru import logger
@@ -19,33 +18,49 @@ import json
 
 from src import __version__
 
+
 class Language(Enum):
     """Language enumeration."""
+
     AUTO = "Auto"
     ENGLISH = "en_US"
     CHINESE = "zh_CN"
     JAPANESE = "ja_JP"
 
+
 class Config(QConfig):
     """
     Configuration for the application.
     """
-    
+
     # Theme Mode: Light, Dark, Auto
     themeMode = OptionsConfigItem(
-        "General", "ThemeMode", Theme.LIGHT, OptionsValidator(Theme), EnumSerializer(Theme), restart=False
+        "General",
+        "ThemeMode",
+        Theme.LIGHT,
+        OptionsValidator(Theme),
+        EnumSerializer(Theme),
+        restart=False,
     )
-    
+
     # Language: Auto, English, Chinese, Japanese
     language = OptionsConfigItem(
-        "General", "Language", Language.AUTO, OptionsValidator(Language), EnumSerializer(Language), restart=True
+        "General",
+        "Language",
+        Language.AUTO,
+        OptionsValidator(Language),
+        EnumSerializer(Language),
+        restart=True,
     )
-    
+
     # Model Directory
-    modelDir = ConfigItem(
-        "Model", "ModelDir", "", FolderValidator()
+    modelDir = ConfigItem("Model", "ModelDir", "", FolderValidator())
+
+    # SAM3 Weight Path (single .pt file)
+    sam3WeightPath = ConfigItem(
+        "Model", "Sam3WeightPath", "", validator=None, restart=False
     )
-    
+
     # Mica Effect
     micaEnabled = ConfigItem(
         "Personalization", "MicaEnabled", True, validator=None, restart=False
@@ -90,7 +105,7 @@ class Translator(QObject):
         logger.debug(f"Requested language: {language}")
         if language == Language.AUTO:
             # Check system locale
-            locale = QLocale.system().name() # e.g., en_US, zh_CN, ja_JP
+            locale = QLocale.system().name()  # e.g., en_US, zh_CN, ja_JP
             if locale.startswith("zh"):
                 self._current_language = Language.CHINESE
             elif locale.startswith("ja"):
@@ -109,7 +124,7 @@ class Translator(QObject):
     def set_language(self, language: Language):
         """
         Set the current language.
-        
+
         Parameters
         ----------
         language : Language
@@ -117,34 +132,35 @@ class Translator(QObject):
         """
         if language == self._current_language:
             return
-            
+
         self._current_language = language
         logger.info(f"Language switched to: {language}")
 
     def tr(self, key: str) -> str:
         """
         Get translated string for the given key.
-        
+
         If translation is missing for current language, falls back to English,
         then to the key itself.
         """
         # Get dictionary for current language
         lang_dict = self._translations.get(self._current_language, {})
-        
+
         # Try to find key in current language
         result = lang_dict.get(key)
         if result is not None:
             return result
-            
+
         # Fallback to English if not in current language
         if self._current_language != Language.ENGLISH:
             en_dict = self._translations.get(Language.ENGLISH, {})
             result = en_dict.get(key)
             if result is not None:
                 return result
-                
+
         # Fallback to key itself
         return key
+
 
 YEAR = 2025
 AUTHOR = "Haozhou Wang"
@@ -154,10 +170,11 @@ VERSION = __version__
 # RELEASE_URL = "https://github.com/zhiyiYo/PyQt-Fluent-Widgets/releases/latest"
 
 cfg = Config()
-qconfig.load('config.json', cfg)
+qconfig.load("config.json", cfg)
 
 # Global instance
 translator = Translator()
+
 
 def tr(key: str) -> str:
     """Helper function to translate a key using the global translator."""
