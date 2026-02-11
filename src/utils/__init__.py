@@ -12,6 +12,7 @@ from src.utils.seedling_preview import (
     pixel_square_bounds_from_geo_center,
     preview_bounds_from_center,
 )
+from src.utils.seedling_sam3 import run_preview_inference
 from src.utils.seedling_slice import (
     SliceWindow,
     bbox_centers_xyxy,
@@ -30,6 +31,7 @@ __all__ = [
     "load_results_pth",
     "pixel_square_bounds_from_geo_center",
     "preview_bounds_from_center",
+    "run_preview_inference",
     "save_bbox_shp",
     "save_mask_polygon_shp",
     "save_point_shp",

@@ -23,9 +23,18 @@ import pyqtgraph as pg
 # Move global config to instance level or handle dynamically
 # pg.setConfigOptions(antialias=True)
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QGraphicsPathItem, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
-from PySide6.QtGui import QKeyEvent, QPolygonF, QTransform, QWheelEvent
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QKeyEvent,
+    QPainterPath,
+    QPen,
+    QPolygonF,
+    QTransform,
+    QWheelEvent,
+)
 from loguru import logger
 from src.gui.config import cfg
 from src.utils.seedling_preview import (
@@ -193,6 +202,8 @@ class MapCanvas(QWidget):
     # New signals for layer panel sync
     sigLayerAdded = Signal(str, str)  # name, type
     sigLayerRemoved = Signal(str)
+    PREVIEW_LAYER_NAME = "Preview"
+    PREVIEW_RESULT_LAYER_NAME = "Preview Result"
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -852,9 +863,7 @@ class MapCanvas(QWidget):
         if enabled:
             self._update_preview_overlay()
             return
-        self._preview_hover_center = None
-        self._preview_locked_center = None
-        self._preview_box_item.setVisible(False)
+        self._clear_preview_layers()
 
     def set_preview_box_size(self, size: int) -> None:
         """Set preview box size and refresh overlay."""
@@ -909,7 +918,7 @@ class MapCanvas(QWidget):
 
     def _ensure_preview_layer_registered(self) -> None:
         """Register preview overlay into layer tree as vector layer."""
-        preview_name = "Preview"
+        preview_name = self.PREVIEW_LAYER_NAME
         if self._preview_box_item.parentItem() is None:
             self._item_group.addItem(self._preview_box_item)
         if preview_name in self._layers:
@@ -922,6 +931,111 @@ class MapCanvas(QWidget):
         }
         self._layer_order.append(preview_name)
         self.sigLayerAdded.emit(preview_name, "Vector")
+
+    def _clear_preview_layers(self) -> None:
+        """Clear preview box and preview-result layers from canvas."""
+        self._preview_hover_center = None
+        self._preview_locked_center = None
+        self._preview_box_item.setVisible(False)
+        self.remove_layer(self.PREVIEW_LAYER_NAME)
+        self.clear_preview_result_layer()
+
+    def clear_preview_result_layer(self) -> None:
+        """Remove preview inference result layer if present."""
+        self.remove_layer(self.PREVIEW_RESULT_LAYER_NAME)
+
+    def get_locked_preview_bounds(self) -> Optional[Tuple[float, float, float, float]]:
+        """Return locked preview bounds when preview area exists."""
+        if self._preview_locked_center is None:
+            return None
+        return self._preview_bounds()
+
+    def read_preview_patch(
+        self,
+        bounds_geo: Tuple[float, float, float, float],
+    ) -> Optional[Dict[str, Any]]:
+        """Read preview patch image and transform from active raster."""
+        dataset = self._active_raster_dataset()
+        if dataset is None:
+            return None
+        if not HAS_RASTERIO:
+            return None
+        x_min, y_min, x_max, y_max = bounds_geo
+        try:
+            window = dataset.window(x_min, y_min, x_max, y_max)
+            window = window.round_offsets().round_lengths()
+            if window.width <= 0 or window.height <= 0:
+                return None
+            patch = dataset.read(window=window, boundless=True)
+            if patch.ndim != 3:
+                return None
+            patch = patch.transpose((1, 2, 0))
+            if patch.shape[2] > 3:
+                patch = patch[:, :, :3]
+            if patch.dtype != np.uint8:
+                max_value = float(np.max(patch))
+                patch = (
+                    np.zeros_like(patch, dtype=np.uint8)
+                    if max_value <= 0
+                    else (patch / max_value * 255).astype(np.uint8)
+                )
+            patch_transform = dataset.window_transform(window)
+            return {"image": patch, "transform": patch_transform}
+        except Exception as exc:
+            logger.error(f"Failed to read preview patch: {exc}")
+            return None
+
+    def show_preview_result_polygons(
+        self,
+        polygons_geo: List[np.ndarray],
+    ) -> None:
+        """Render preview inference polygons with per-instance colors."""
+        self.clear_preview_result_layer()
+        if not polygons_geo:
+            return
+        group_item = pg.ItemGroup()
+        group_item.setZValue(650)
+        self._item_group.addItem(group_item)
+        for idx, polygon in enumerate(polygons_geo):
+            poly_xy = np.asarray(polygon, dtype=float)
+            if poly_xy.ndim != 2 or poly_xy.shape[0] < 3:
+                continue
+            path = QPainterPath()
+            path.moveTo(float(poly_xy[0, 0]), float(poly_xy[0, 1]))
+            for point_xy in poly_xy[1:]:
+                path.lineTo(float(point_xy[0]), float(point_xy[1]))
+            path.closeSubpath()
+            graphics_item = QGraphicsPathItem(path)
+            color = QColor.fromHsv((idx * 47) % 360, 220, 255, 130)
+            pen = QPen(color, 2)  # 2 像素宽
+            pen.setCosmetic(True) # 关键：设置为 Cosmetic，忽略场景缩放，始终保持 2 像素宽
+            graphics_item.setPen(pen)
+            graphics_item.setBrush(QBrush(color))
+            graphics_item.setParentItem(group_item)
+        self._layers[self.PREVIEW_RESULT_LAYER_NAME] = {
+            "item": group_item,
+            "visible": True,
+            "bounds": self._polygon_bounds(polygons_geo),
+        }
+        self._layer_order.append(self.PREVIEW_RESULT_LAYER_NAME)
+        self.sigLayerAdded.emit(self.PREVIEW_RESULT_LAYER_NAME, "Vector")
+
+    def _polygon_bounds(self, polygons_geo: List[np.ndarray]) -> Optional[LayerBounds]:
+        """Compute layer bounds from a polygon list."""
+        if not polygons_geo:
+            return None
+        coords = [
+            np.asarray(poly, dtype=float) for poly in polygons_geo if len(poly) >= 3
+        ]
+        if not coords:
+            return None
+        stacked = np.vstack(coords)
+        return LayerBounds(
+            left=float(np.min(stacked[:, 0])),
+            bottom=float(np.min(stacked[:, 1])),
+            right=float(np.max(stacked[:, 0])),
+            top=float(np.max(stacked[:, 1])),
+        )
 
     def _update_preview_overlay(self) -> None:
         """Update preview box polyline rendering."""

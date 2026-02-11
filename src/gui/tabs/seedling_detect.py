@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+from loguru import logger
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import QThread, Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -31,6 +32,10 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.config import cfg, tr
+from src.gui.tabs.seedling_preview_worker import (
+    PreviewInferenceInput,
+    SeedlingPreviewWorker,
+)
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:
@@ -59,6 +64,8 @@ class SeedlingTab(TabInterface):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._dom_path: str = ""
+        self._preview_thread: Optional[QThread] = None
+        self._preview_worker: Optional[SeedlingPreviewWorker] = None
         self._init_controls()
         self._connect_preview_interaction()
         self._apply_weight_availability()
@@ -180,8 +187,8 @@ class SeedlingTab(TabInterface):
         self.label_dom = BodyLabel(tr("page.seedling.label.no_dom"))
         self.label_dom.setMinimumWidth(280)
 
-        bar.addAction(Action(FIF.ROBOT, tr("page.seedling.group.sam")))
-        bar.addSeparator()
+        # bar.addAction(Action(FIF.ROBOT, tr("page.seedling.group.sam")))
+        # bar.addSeparator()
         bar.addWidget(self.btn_load_dom)
         bar.addSeparator()
         bar.addWidget(self.label_dom)
@@ -322,7 +329,7 @@ class SeedlingTab(TabInterface):
         self.btn_preview_detect = PrimaryPushButton(
             tr("page.seedling.btn.preview_detect")
         )
-        self.btn_preview_detect.clicked.connect(self.sigPreviewDetect.emit)
+        self.btn_preview_detect.clicked.connect(self._on_preview_inference_clicked)
         self.spin_preview_size.valueChanged.connect(self.sigPreviewSizeRequested.emit)
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
@@ -354,7 +361,138 @@ class SeedlingTab(TabInterface):
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview_stop"))
         else:
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
+            self.map_component.map_canvas.clear_preview_result_layer()
         self.sigPreviewModeToggled.emit(checked)
+
+    @Slot()
+    def _on_preview_inference_clicked(self) -> None:
+        """Start or stop preview inference thread."""
+        if self._preview_thread is not None:
+            self._stop_preview_inference()
+            return
+        self._start_preview_inference()
+
+    def _start_preview_inference(self) -> None:
+        """Start preview inference in a background thread."""
+        map_canvas = self.map_component.map_canvas
+        bounds_geo = map_canvas.get_locked_preview_bounds()
+        if bounds_geo is None:
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.seedling.msg.pick_preview_first"),
+                parent=self,
+                duration=2500,
+            )
+            return
+        patch_data = map_canvas.read_preview_patch(bounds_geo)
+        if patch_data is None:
+            InfoBar.error(
+                title=tr("error"),
+                content=tr("page.seedling.msg.preview_patch_failed"),
+                parent=self,
+                duration=3000,
+            )
+            return
+        payload = PreviewInferenceInput(
+            image_rgb=patch_data["image"],
+            transform=patch_data["transform"],
+            weight_path=str(cfg.sam3WeightPath.value),
+            prompt=self.edit_prompt.text().strip() or "plants",
+            conf=float(self.spin_conf.value()),
+            iou=float(self.spin_iou.value()),
+            cache_dir=self._preview_cache_dir(),
+        )
+        self._preview_thread = QThread(self)
+        self._preview_worker = SeedlingPreviewWorker(payload)
+        self._preview_worker.moveToThread(self._preview_thread)
+        self._preview_thread.started.connect(self._preview_worker.run)
+        self._preview_worker.sigFinished.connect(self._on_preview_inference_finished)
+        self._preview_worker.sigFailed.connect(self._on_preview_inference_failed)
+        self._preview_worker.sigCancelled.connect(self._on_preview_inference_cancelled)
+        self._preview_thread.start()
+        self._set_preview_running_ui(True)
+
+    def _preview_cache_dir(self) -> str:
+        """Return app-level preview cache directory for Ultralytics outputs."""
+        if cfg.modelDir.value:
+            return str(Path(cfg.modelDir.value) / "app" / "cache")
+        return str(Path.cwd() / "app" / "cache")
+
+    def _stop_preview_inference(self) -> None:
+        """Request cancellation for running preview inference."""
+        if self._preview_worker is None:
+            return
+        self._preview_worker.request_cancel()
+        InfoBar.info(
+            title=tr("info"),
+            content=tr("page.seedling.msg.preview_stopping"),
+            parent=self,
+            duration=2000,
+        )
+
+    def _teardown_preview_thread(self) -> None:
+        """Disconnect and cleanup preview inference thread."""
+        if self._preview_thread is None:
+            return
+        self._preview_thread.quit()
+        self._preview_thread.wait(1000)
+        self._preview_thread.deleteLater()
+        self._preview_thread = None
+        self._preview_worker = None
+        self._set_preview_running_ui(False)
+
+    def _set_preview_running_ui(self, running: bool) -> None:
+        """Update preview-run button text and status bar notification."""
+        if running:
+            self.btn_preview_detect.setText(tr("page.seedling.btn.stop_inference"))
+            InfoBar.info(
+                title=tr("info"),
+                content=tr("page.seedling.msg.preview_running"),
+                parent=self,
+                duration=2000,
+            )
+            return
+        self.btn_preview_detect.setText(tr("page.seedling.btn.preview_detect"))
+
+    @Slot(list, list)
+    def _on_preview_inference_finished(
+        self,
+        polygons_geo: list,
+        _scores: list,
+    ) -> None:
+        """Render preview inference result polygons."""
+        self.map_component.map_canvas.show_preview_result_polygons(polygons_geo)
+        InfoBar.success(
+            title=tr("success"),
+            content=tr("page.seedling.msg.preview_finished"),
+            parent=self,
+            duration=2000,
+        )
+        self._teardown_preview_thread()
+
+    @Slot(str)
+    def _on_preview_inference_failed(self, message: str) -> None:
+        """Handle preview inference failure message."""
+        logger.error("Preview inference failed:\n{}", message)
+        short_message = message.splitlines()[0] if message else tr("error")
+        InfoBar.error(
+            title=tr("error"),
+            content=f"{short_message} (details in log)",
+            parent=self,
+            duration=12000,
+        )
+        self._teardown_preview_thread()
+
+    @Slot()
+    def _on_preview_inference_cancelled(self) -> None:
+        """Handle preview inference cancellation."""
+        InfoBar.warning(
+            title=tr("warning"),
+            content=tr("page.seedling.msg.preview_cancelled"),
+            parent=self,
+            duration=1800,
+        )
+        self._teardown_preview_thread()
 
     def _build_execute_section(self) -> QWidget:
         """Build full-image slicing section widget."""
