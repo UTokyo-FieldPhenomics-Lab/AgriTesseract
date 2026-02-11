@@ -204,3 +204,11 @@
 - [ ] 接通 `bbox.shp`/`mask.shp` 输出。
 - [ ] 补充 i18n 文案。
 - [ ] 添加并通过 `uv run pytest` 的新增测试。
+
+接下来 Todo List（建议执行顺序）
+1. 完成 MapCanvas 点结果 CRUD 可视化与命中编辑（add/move/delete/undo）  
+2. 实现 seedling_worker.py（QThread）并接通全图切块推理进度  
+3. 接入 SAM3 text prompt + 切块推理主流程（调用 src/utils/seedling_sam3.py / src/utils/seedling_slice.py）  
+4. 完成中间结果目录读写：results.pth + preview.pdf  
+5. 完成最终产物导出：bbox.shp + mask.shp + 点 fid shp  
+6. 补一轮端到端验证（DOM -> 预览 -> 全图 -> 缓存回读 -> shp/pdf）
