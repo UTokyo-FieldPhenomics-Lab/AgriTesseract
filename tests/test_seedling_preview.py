@@ -2,7 +2,7 @@
 
 from affine import Affine
 
-from src.utils.seedling_preview import (
+from src.utils.seedling_detect.preview import (
     clamp_preview_size,
     pixel_square_bounds_from_geo_center,
     preview_bounds_from_center,

@@ -1,4 +1,7 @@
-"""Utility package exports for EasyPlantFieldID."""
+"""Seedling detection submodule for SAM3 inference workflows.
+
+Re-exports all public API symbols for backward compatibility.
+"""
 
 from src.utils.seedling_detect.cache import (
     export_slice_preview_pdf,

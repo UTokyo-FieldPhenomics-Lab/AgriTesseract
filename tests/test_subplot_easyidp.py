@@ -7,7 +7,7 @@ import numpy as np
 import pyproj
 import pytest
 
-from src.gui.tabs.subplot_easyidp import build_generate_kwargs, generate_and_save
+from src.utils.subplot_generate.io import build_generate_kwargs, generate_and_save
 
 
 def _make_boundary_roi() -> idp.ROI:

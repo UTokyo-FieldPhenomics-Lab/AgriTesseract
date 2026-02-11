@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from src.utils.seedling_slice import bbox_centers_xyxy, generate_slice_windows
+from src.utils.seedling_detect.slice import bbox_centers_xyxy, generate_slice_windows
 
 
 def test_generate_slice_windows_cover_image_extent() -> None:

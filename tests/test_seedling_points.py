@@ -1,6 +1,6 @@
 """Tests for seedling point editing helpers."""
 
-from src.utils.seedling_points import PointAction, SeedlingPointStore
+from src.utils.seedling_detect.points import PointAction, SeedlingPointStore
 
 
 def test_point_store_add_move_delete_and_undo() -> None:

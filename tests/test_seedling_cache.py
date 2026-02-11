@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.utils.seedling_cache import (
+from src.utils.seedling_detect.cache import (
     export_slice_preview_pdf,
     load_results_pth,
     save_results_pth,

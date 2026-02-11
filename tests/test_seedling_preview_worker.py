@@ -1,6 +1,6 @@
 """Tests for preview worker error formatting."""
 
-from src.gui.tabs.seedling_preview_worker import format_worker_exception
+from src.utils.seedling_detect.qthread import format_worker_exception
 
 
 def test_format_worker_exception_includes_traceback_lines() -> None:

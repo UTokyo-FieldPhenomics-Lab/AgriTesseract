@@ -32,10 +32,11 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.config import cfg, tr
-from src.gui.tabs.seedling_preview_worker import (
+from src.utils.seedling_detect.qthread import (
     PreviewInferenceInput,
     SeedlingPreviewWorker,
 )
+from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:
@@ -76,11 +77,27 @@ class SeedlingTab(TabInterface):
     def _connect_preview_interaction(self) -> None:
         """Connect preview controls with map canvas interactions."""
         map_canvas = self.map_component.map_canvas
-        self.sigPreviewModeToggled.connect(map_canvas.set_preview_mode_enabled)
-        self.sigPreviewSizeRequested.connect(map_canvas.set_preview_box_size)
-        map_canvas.sigPreviewSizeChanged.connect(self.sync_preview_size)
-        map_canvas.sigPreviewBoxLocked.connect(self._on_preview_locked)
-        map_canvas.set_preview_box_size(self.spin_preview_size.value())
+        self._preview_ctrl = SeedlingPreviewController(map_canvas)
+        map_canvas._key_handlers.append(self._preview_ctrl.handle_key_press)
+        map_canvas._hover_handlers.append(
+            self._preview_ctrl.handle_coordinate_hover
+        )
+        map_canvas._click_handlers.append(self._preview_ctrl.handle_click)
+        self.sigPreviewModeToggled.connect(
+            self._preview_ctrl.set_preview_mode_enabled
+        )
+        self.sigPreviewSizeRequested.connect(
+            self._preview_ctrl.set_preview_box_size
+        )
+        self._preview_ctrl.sigPreviewSizeChanged.connect(
+            self.sync_preview_size
+        )
+        self._preview_ctrl.sigPreviewBoxLocked.connect(
+            self._on_preview_locked
+        )
+        self._preview_ctrl.set_preview_box_size(
+            self.spin_preview_size.value()
+        )
 
     @Slot(float, float, float, float)
     def _on_preview_locked(
@@ -361,7 +378,7 @@ class SeedlingTab(TabInterface):
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview_stop"))
         else:
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
-            self.map_component.map_canvas.clear_preview_result_layer()
+            self._preview_ctrl.clear_preview_result_layer()
         self.sigPreviewModeToggled.emit(checked)
 
     @Slot()
@@ -374,8 +391,7 @@ class SeedlingTab(TabInterface):
 
     def _start_preview_inference(self) -> None:
         """Start preview inference in a background thread."""
-        map_canvas = self.map_component.map_canvas
-        bounds_geo = map_canvas.get_locked_preview_bounds()
+        bounds_geo = self._preview_ctrl.get_locked_preview_bounds()
         if bounds_geo is None:
             InfoBar.warning(
                 title=tr("warning"),
@@ -384,7 +400,7 @@ class SeedlingTab(TabInterface):
                 duration=2500,
             )
             return
-        patch_data = map_canvas.read_preview_patch(bounds_geo)
+        patch_data = self._preview_ctrl.read_preview_patch(bounds_geo)
         if patch_data is None:
             InfoBar.error(
                 title=tr("error"),
@@ -461,7 +477,7 @@ class SeedlingTab(TabInterface):
         _scores: list,
     ) -> None:
         """Render preview inference result polygons."""
-        self.map_component.map_canvas.show_preview_result_polygons(polygons_geo)
+        self._preview_ctrl.show_preview_result_polygons(polygons_geo)
         InfoBar.success(
             title=tr("success"),
             content=tr("page.seedling.msg.preview_finished"),

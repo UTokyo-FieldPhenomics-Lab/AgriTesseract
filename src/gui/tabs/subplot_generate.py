@@ -12,7 +12,7 @@ from qfluentwidgets import CheckBox, InfoBar, PushButton
 
 from src.gui.components.base_interface import PageGroup, TabInterface
 from src.gui.config import tr
-from src.gui.tabs.subplot_easyidp import (
+from src.utils.subplot_generate.io import (
     calculate_optimal_rotation,
     generate_and_save,
     generate_subplots_roi,

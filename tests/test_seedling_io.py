@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.utils.seedling_io import (
+from src.utils.seedling_detect.io import (
     save_bbox_shp,
     save_mask_polygon_shp,
     save_point_shp,

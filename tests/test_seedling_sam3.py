@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.utils.seedling_sam3 import (
-    _extract_polygons_px,
+from src.utils.seedling_detect.sam3 import (
+    _extract_polygons_from_mask_xy,
     _extract_scores,
     run_preview_inference,
 )
@@ -28,13 +28,13 @@ class _DummyResult:
     boxes: _DummyBoxes
 
 
-def test_extract_polygons_px_filters_invalid_polygons() -> None:
+def test_extract_polygons_from_mask_xy_filters_invalid() -> None:
     """Polygon extraction should keep only valid polygon arrays."""
     result_obj = _DummyResult(
         masks=_DummyMasks(xy=[np.array([[0, 0], [1, 0], [1, 1]]), np.array([[0, 0]])]),
         boxes=_DummyBoxes(conf=np.array([0.8, 0.2])),
     )
-    polygons = _extract_polygons_px(result_obj, image_shape=(10, 10))
+    polygons = _extract_polygons_from_mask_xy(result_obj)
     assert len(polygons) == 1
     assert polygons[0].shape == (3, 2)
 

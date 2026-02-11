@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 from affine import Affine
 
 
@@ -99,3 +100,44 @@ def pixel_square_bounds_from_geo_center(
     y_min = float(min(y0, y1))
     y_max = float(max(y0, y1))
     return x_min, y_min, x_max, y_max
+
+
+def polygon_px_to_geo(
+    polygon_px: np.ndarray,
+    transform: Affine,
+) -> np.ndarray:
+    """Convert polygon from patch pixel coordinates to geo coordinates.
+
+    Parameters
+    ----------
+    polygon_px : numpy.ndarray
+        Polygon vertices with shape ``(N, 2)`` in ``(x, y)`` pixel order.
+    transform : affine.Affine
+        Affine transform mapping ``(col, row) -> (geo_x, geo_y)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Transformed polygon with shape ``(N, 2)`` in geo coordinates.
+
+    Examples
+    --------
+    >>> from affine import Affine
+    >>> t = Affine(0.1, 0.0, 100.0, 0.0, -0.1, 200.0)
+    >>> poly = np.array([[0, 0], [10, 0], [10, 10]])
+    >>> polygon_px_to_geo(poly, t)
+    array([[100. , 200. ],
+           [101. , 200. ],
+           [101. , 199. ]])
+    """
+    poly_xy = np.asarray(polygon_px, dtype=float)  # shape: (N, 2)
+    geo_points = []
+    for x_coord, y_coord in poly_xy:
+        x_geo = (
+            transform.c + transform.a * float(x_coord) + transform.b * float(y_coord)
+        )
+        y_geo = (
+            transform.f + transform.d * float(x_coord) + transform.e * float(y_coord)
+        )
+        geo_points.append([float(x_geo), float(y_geo)])
+    return np.asarray(geo_points, dtype=float)
