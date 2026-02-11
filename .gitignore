@@ -13,3 +13,4 @@ wheels/
 
 # App generated configs
 config.json
+/app
