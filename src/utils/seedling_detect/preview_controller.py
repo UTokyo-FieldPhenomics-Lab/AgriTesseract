@@ -198,6 +198,19 @@ class SeedlingPreviewController(QObject):
         """Remove preview inference result layer if present."""
         self._canvas.remove_layer(PREVIEW_RESULT_LAYER_NAME)
 
+    def set_preview_layers_visibility(self, visible: bool) -> None:
+        """Set visibility for preview box and result layers.
+
+        Parameters
+        ----------
+        visible : bool
+            True to show, False to hide (uncheck in layer tree).
+        """
+        if PREVIEW_LAYER_NAME in self._canvas._layers:
+            self._canvas.set_layer_visibility(PREVIEW_LAYER_NAME, visible)
+        if PREVIEW_RESULT_LAYER_NAME in self._canvas._layers:
+            self._canvas.set_layer_visibility(PREVIEW_RESULT_LAYER_NAME, visible)
+
     # -- event handlers (called by MapCanvas) -------------------------------
 
     def handle_key_press(self, event: QKeyEvent) -> bool:

@@ -69,9 +69,9 @@ class SeedlingTab(TabInterface):
         self._preview_worker: Optional[SeedlingPreviewWorker] = None
         self._init_controls()
         self._connect_preview_interaction()
-        self._apply_weight_availability()
+        self._update_button_states()
         cfg.sam3WeightPath.valueChanged.connect(
-            lambda _: self._apply_weight_availability()
+            lambda _: self._update_button_states()
         )
 
     def _connect_preview_interaction(self) -> None:
@@ -198,6 +198,11 @@ class SeedlingTab(TabInterface):
         widget = self.stacked_widget.widget(index)
         if widget is None:
             return
+        
+        # Toggle preview layers visibility: only visible in Preview tab
+        is_preview_tab = (widget.objectName() == "seedlingSam3PreviewTab")
+        self._preview_ctrl.set_preview_layers_visibility(is_preview_tab)
+
         self.nav.setCurrentItem(widget.objectName())
         qrouter.push(self.stacked_widget, widget.objectName())
 
@@ -586,6 +591,10 @@ class SeedlingTab(TabInterface):
                 duration=3500,
             )
             return
+        
+        # DOM loaded successfully
+        self._update_button_states()
+        
         map_canvas.zoom_to_layer(Path(file_path).stem)
         InfoBar.success(
             title=tr("success"),
@@ -594,25 +603,35 @@ class SeedlingTab(TabInterface):
             duration=1800,
         )
 
-    def _apply_weight_availability(self) -> None:
-        """Enable or disable SAM3 controls by weight availability."""
+    def _update_button_states(self) -> None:
+        """Enable or disable controls based on DOM and model weight availability."""
         weight_path = (
             Path(cfg.sam3WeightPath.value) if cfg.sam3WeightPath.value else None
         )
-        is_ready = bool(weight_path and weight_path.exists())
-        for button in [
-            self.btn_pick_preview,
-            self.btn_preview_detect,
-            self.btn_full_detect,
-            self.btn_save_cache,
-            self.btn_load_cache,
-        ]:
-            button.setEnabled(is_ready)
-        if is_ready:
-            return
-        InfoBar.warning(
-            title=tr("warning"),
-            content=tr("page.seedling.msg.weight_unavailable"),
-            parent=self,
-            duration=4000,
-        )
+        is_weight_ready = bool(weight_path and weight_path.exists())
+        is_dom_ready = bool(self._dom_path)
+
+        # Buttons that require model weights only (file agnostic or file tab specific?)
+        # Actually most require DOM.
+        
+        # Preview tab buttons require DOM + Weights
+        is_preview_ready = is_weight_ready and is_dom_ready
+        
+        self.btn_pick_preview.setEnabled(is_preview_ready)
+        self.btn_preview_detect.setEnabled(is_preview_ready)
+        
+        # Slice inference require DOM + Weights
+        self.btn_full_detect.setEnabled(is_preview_ready)
+        
+        # Cache buttons require DOM (to associate?) or Weights? 
+        # Usually cache saves detection results, so it needs DOM context.
+        self.btn_save_cache.setEnabled(is_dom_ready)
+        self.btn_load_cache.setEnabled(is_dom_ready)
+
+        if not is_weight_ready:
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.seedling.msg.weight_unavailable"),
+                parent=self,
+                duration=4000,
+            )

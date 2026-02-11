@@ -194,6 +194,7 @@ class MapCanvas(QWidget):
     # Signals for layer panel sync
     sigLayerAdded = Signal(str, str)  # name, type
     sigLayerRemoved = Signal(str)
+    sigLayerVisibilityChanged = Signal(str, bool)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -555,6 +556,8 @@ class MapCanvas(QWidget):
         if layer_name in self._layers:
             self._layers[layer_name]["visible"] = visible
             self._layers[layer_name]["item"].setVisible(visible)
+            # Emit signal so LayerPanel can sync (e.g. checkbox)
+            self.sigLayerVisibilityChanged.emit(layer_name, visible)
             logger.debug(f"Layer '{layer_name}' visibility: {visible}")
 
     def update_layer_order(self, order: List[str]) -> None:
