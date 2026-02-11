@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 # -- Layer name constants ---------------------------------------------------
 PREVIEW_LAYER_NAME = "Preview Regions"
 PREVIEW_RESULT_LAYER_NAME = "Preview Result"
+SLICE_GRID_LAYER_NAME = "Slice Grid"
 
 
 class SeedlingPreviewController(QObject):
@@ -210,6 +211,76 @@ class SeedlingPreviewController(QObject):
             self._canvas.set_layer_visibility(PREVIEW_LAYER_NAME, visible)
         if PREVIEW_RESULT_LAYER_NAME in self._canvas._layers:
             self._canvas.set_layer_visibility(PREVIEW_RESULT_LAYER_NAME, visible)
+
+    def show_slice_grid(self, slice_size: int, overlap: float) -> None:
+        """Generate and show slice grid based on current DOM.
+
+        Parameters
+        ----------
+        slice_size : int
+            Size of slice windows in pixels.
+        overlap : float
+            Overlap ratio (0.0 to 1.0).
+        """
+        dataset = self._active_raster_dataset()
+        if dataset is None:
+            logger.warning("No active raster dataset for slice grid.")
+            return
+
+        self.clear_slice_grid_layer()
+
+        width = dataset.width
+        height = dataset.height
+        transform = dataset.transform
+        step = int(slice_size * (1 - overlap))
+        if step <= 0:
+            step = slice_size
+
+        polygons_geo = []
+        for y in range(0, height, step):
+            for x in range(0, width, step):
+                # Calculate simple window
+                w = min(slice_size, width - x)
+                h = min(slice_size, height - y)
+                
+                # Get geo coordinates
+                # Pixel (col, row) -> Geo (x, y)
+                # (x, y) is top-left in raster space
+                x_tl, y_tl = transform * (x, y)
+                x_br, y_br = transform * (x + w, y + h)
+                x_tr, y_tr = transform * (x + w, y)
+                x_bl, y_bl = transform * (x, y + h)
+
+                # Create polygon (closed loop)
+                poly = np.array([
+                    [x_tl, y_tl],
+                    [x_tr, y_tr],
+                    [x_br, y_br],
+                    [x_bl, y_bl],
+                    [x_tl, y_tl]
+                ])
+                polygons_geo.append(poly)
+
+        if not polygons_geo:
+            return
+
+        group_item = pg.ItemGroup()
+        group_item.setZValue(400)
+        self._canvas.add_overlay_item(group_item)
+
+        for poly in polygons_geo:
+            self._add_polygon_to_group_random(group_item, poly)
+
+        self._register_slice_grid_layer(group_item, polygons_geo)
+
+    def clear_slice_grid_layer(self) -> None:
+        """Remove slice grid layer."""
+        self._canvas.remove_layer(SLICE_GRID_LAYER_NAME)
+
+    def set_slice_grid_visibility(self, visible: bool) -> None:
+        """Set visibility for slice grid layer."""
+        if SLICE_GRID_LAYER_NAME in self._canvas._layers:
+            self._canvas.set_layer_visibility(SLICE_GRID_LAYER_NAME, visible)
 
     # -- event handlers (called by MapCanvas) -------------------------------
 
@@ -411,6 +482,35 @@ class SeedlingPreviewController(QObject):
         graphics_item.setBrush(QBrush(color))
         graphics_item.setParentItem(group_item)
 
+    def _add_polygon_to_group_random(
+        self,
+        group_item: pg.ItemGroup,
+        poly_xy: np.ndarray,
+    ) -> None:
+        """Add a single polygon with random color to the group."""
+        import random
+        path = QPainterPath()
+        path.moveTo(float(poly_xy[0, 0]), float(poly_xy[0, 1]))
+        for point_xy in poly_xy[1:]:
+            path.lineTo(float(point_xy[0]), float(point_xy[1]))
+        path.closeSubpath()
+        graphics_item = QGraphicsPathItem(path)
+        
+        # Random color with 50% alpha (128)
+        color = QColor(
+            random.randint(0, 255),
+            random.randint(0, 255),
+            random.randint(0, 255),
+            128
+        )
+        
+        # Solid border
+        pen = QPen(color, 2)
+        pen.setCosmetic(True)
+        graphics_item.setPen(pen)
+        graphics_item.setBrush(QBrush(color))
+        graphics_item.setParentItem(group_item)
+
     def _register_result_layer(
         self,
         group_item: pg.ItemGroup,
@@ -428,6 +528,25 @@ class SeedlingPreviewController(QObject):
         self._canvas._layer_order.append(PREVIEW_RESULT_LAYER_NAME)
         self._canvas.sigLayerAdded.emit(
             PREVIEW_RESULT_LAYER_NAME, "Vector"
+        )
+
+    def _register_slice_grid_layer(
+        self,
+        group_item: pg.ItemGroup,
+        polygons_geo: List[np.ndarray],
+    ) -> None:
+        """Register slice grid polygon group as a canvas layer."""
+        from src.gui.components.map_canvas import LayerBounds
+
+        bounds = self._polygon_bounds(polygons_geo)
+        self._canvas._layers[SLICE_GRID_LAYER_NAME] = {
+            "item": group_item,
+            "visible": True,
+            "bounds": bounds,
+        }
+        self._canvas._layer_order.append(SLICE_GRID_LAYER_NAME)
+        self._canvas.sigLayerAdded.emit(
+            SLICE_GRID_LAYER_NAME, "Vector"
         )
 
     @staticmethod

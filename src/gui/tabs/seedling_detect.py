@@ -55,7 +55,7 @@ class SeedlingTab(TabInterface):
 
     sigLoadDom = Signal(str)
     sigPreviewDetect = Signal()
-    sigFullDetect = Signal()
+    sigFullInference = Signal()
     sigSaveCache = Signal()
     sigLoadCache = Signal()
     sigSavePoints = Signal()
@@ -86,12 +86,9 @@ class SeedlingTab(TabInterface):
         self.sigPreviewModeToggled.connect(
             self._preview_ctrl.set_preview_mode_enabled
         )
-        self.sigPreviewSizeRequested.connect(
-            self._preview_ctrl.set_preview_box_size
-        )
-        self._preview_ctrl.sigPreviewSizeChanged.connect(
-            self.sync_preview_size
-        )
+        self.spin_preview_size.valueChanged.connect(self._preview_ctrl.set_preview_box_size)
+        self.spin_preview_size.valueChanged.connect(self._sync_slice_size)
+        self._preview_ctrl.sigPreviewSizeChanged.connect(self.sync_preview_size)
         self._preview_ctrl.sigPreviewBoxLocked.connect(
             self._on_preview_locked
         )
@@ -202,6 +199,10 @@ class SeedlingTab(TabInterface):
         # Toggle preview layers visibility: only visible in Preview tab
         is_preview_tab = (widget.objectName() == "seedlingSam3PreviewTab")
         self._preview_ctrl.set_preview_layers_visibility(is_preview_tab)
+
+        # Toggle slice grid visibility: only visible in Slice Inference tab
+        is_slice_tab = (widget.objectName() == "seedlingSliceInferTab")
+        self._preview_ctrl.set_slice_grid_visibility(is_slice_tab)
 
         self.nav.setCurrentItem(widget.objectName())
         qrouter.push(self.stacked_widget, widget.objectName())
@@ -384,6 +385,12 @@ class SeedlingTab(TabInterface):
         self.spin_preview_size.blockSignals(False)
         self.sigPreviewSizeRequested.emit(size)
 
+    @Slot(int)
+    def _sync_slice_size(self, size: int) -> None:
+        """One-way sync: Preview Size -> Slice Size."""
+        if self.spin_slice_size.value() != size:
+            self.spin_slice_size.setValue(size)
+
     @Slot(bool)
     def _on_pick_preview_toggled(self, checked: bool) -> None:
         """Update pick-preview button visual state and emit mode signal."""
@@ -394,6 +401,18 @@ class SeedlingTab(TabInterface):
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
             self._preview_ctrl.clear_preview_result_layer()
         self.sigPreviewModeToggled.emit(checked)
+    
+    @Slot(bool)
+    def _on_slice_preview_toggled(self, checked: bool) -> None:
+        """Handle slice preview toggle."""
+        if checked:
+            self.btn_slice_preview.setText(tr("page.seedling.btn.slice_preview_stop"))
+            size = self.spin_slice_size.value()
+            overlap = self.spin_overlap.value()
+            self._preview_ctrl.show_slice_grid(size, overlap)
+        else:
+            self.btn_slice_preview.setText(tr("page.seedling.btn.slice_preview"))
+            self._preview_ctrl.clear_slice_grid_layer()
 
     @Slot()
     def _on_preview_inference_clicked(self) -> None:
@@ -530,12 +549,19 @@ class SeedlingTab(TabInterface):
         self.spin_slice_size.setRange(256, 2048)
         self.spin_slice_size.setValue(640)
         self.spin_slice_size.setSingleStep(64)
+
         self.spin_overlap = DoubleSpinBox()
         self.spin_overlap.setRange(0.0, 0.8)
         self.spin_overlap.setValue(0.2)
         self.spin_overlap.setSingleStep(0.05)
-        self.btn_full_detect = PrimaryPushButton(tr("page.seedling.btn.detect"))
-        self.btn_full_detect.clicked.connect(self.sigFullDetect.emit)
+        
+        self.spin_overlap.setValue(0.2)
+        self.spin_overlap.setSingleStep(0.05)
+        
+        self.btn_slice_preview = PushButton(tr("page.seedling.btn.slice_preview"))
+        self.btn_slice_preview.setCheckable(True)
+        self.btn_slice_preview.toggled.connect(self._on_slice_preview_toggled)
+
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -546,19 +572,24 @@ class SeedlingTab(TabInterface):
         layout.addWidget(
             self._build_labeled_spin("page.seedling.label.overlap", self.spin_overlap)
         )
-        layout.addWidget(self.btn_full_detect)
+        layout.addWidget(self.btn_slice_preview)
         return wrapper
 
     def _build_cache_section(self) -> QWidget:
         """Build save/load cache section widget."""
+        self.btn_start_inference = PrimaryPushButton(tr("page.seedling.btn.start_inference"))
+        self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
+        
         self.btn_save_cache = PushButton(tr("page.seedling.btn.save_cache"))
         self.btn_save_cache.clicked.connect(self.sigSaveCache.emit)
         self.btn_load_cache = PushButton(tr("page.seedling.btn.load_cache"))
         self.btn_load_cache.clicked.connect(self.sigLoadCache.emit)
+        
         wrapper = QWidget()
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
+        layout.addWidget(self.btn_start_inference)
         layout.addWidget(self.btn_save_cache)
         layout.addWidget(self.btn_load_cache)
         return wrapper
@@ -621,7 +652,8 @@ class SeedlingTab(TabInterface):
         self.btn_preview_detect.setEnabled(is_preview_ready)
         
         # Slice inference require DOM + Weights
-        self.btn_full_detect.setEnabled(is_preview_ready)
+        self.btn_slice_preview.setEnabled(is_preview_ready)
+        self.btn_start_inference.setEnabled(is_preview_ready)
         
         # Cache buttons require DOM (to associate?) or Weights? 
         # Usually cache saves detection results, so it needs DOM context.
