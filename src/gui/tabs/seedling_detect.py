@@ -95,6 +95,9 @@ class SeedlingTab(TabInterface):
         self._preview_ctrl.sigPreviewBoxLocked.connect(
             self._on_preview_locked
         )
+        self._preview_ctrl.sigRequestPreviewModeStop.connect(
+            self._on_request_stop_preview
+        )
         self._preview_ctrl.set_preview_box_size(
             self.spin_preview_size.value()
         )
@@ -115,6 +118,11 @@ class SeedlingTab(TabInterface):
             parent=self,
             duration=1500,
         )
+
+    @Slot()
+    def _on_request_stop_preview(self) -> None:
+        """Handle request to stop preview mode (e.g. via Escape key)."""
+        self.btn_pick_preview.setChecked(False)
 
     def _init_controls(self) -> None:
         """Initialize Fluent tab controls."""
@@ -376,6 +384,7 @@ class SeedlingTab(TabInterface):
         """Update pick-preview button visual state and emit mode signal."""
         if checked:
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview_stop"))
+            self.map_component.map_canvas.setFocus()
         else:
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
             self._preview_ctrl.clear_preview_result_layer()

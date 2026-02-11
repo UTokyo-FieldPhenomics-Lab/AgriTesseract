@@ -24,7 +24,7 @@ import pyqtgraph as pg
 # pg.setConfigOptions(antialias=True)
 
 from PySide6.QtWidgets import QGraphicsPathItem, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF
+from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF, QEvent
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -244,9 +244,12 @@ class MapCanvas(QWidget):
         self._view_box = CustomViewBox()
         self._view_box.sigClicked.connect(self._on_canvas_clicked)
         self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover)
-
+        
         # Create PlotWidget with custom ViewBox
         self._plot_widget = pg.PlotWidget(viewBox=self._view_box)
+        self.setFocusProxy(self._plot_widget)
+        self._plot_widget.installEventFilter(self)
+        self._plot_widget.viewport().installEventFilter(self)
         # Background set in _update_theme
         self._plot_widget.setAspectLocked(True)
 
@@ -269,7 +272,7 @@ class MapCanvas(QWidget):
         self._plot_widget.sigRangeChanged.connect(self._on_view_changed)
 
         layout.addWidget(self._plot_widget)
-
+        
         # Create item group for rotation
         self._item_group = pg.ItemGroup()
         self._view_box.addItem(self._item_group)
@@ -277,7 +280,6 @@ class MapCanvas(QWidget):
         # Create primary image item for raster display
         self._image_item = pg.ImageItem()
         self._item_group.addItem(self._image_item)
-
 
 
     def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:
@@ -864,6 +866,18 @@ class MapCanvas(QWidget):
             if handler(event):
                 return
         super().keyPressEvent(event)
+
+    def eventFilter(self, watched: Any, event: QEvent) -> bool:
+        """Filter events for child widgets (PlotWidget)."""
+        if (watched == self._plot_widget or watched == self._plot_widget.viewport()) and event.type() == QEvent.Type.KeyPress:
+            logger.debug(f"MapCanvas eventFilter caught KeyPress: {event.key()}")
+            # Delegate to registered handlers first
+            for handler in self._key_handlers:
+                # cast event to QKeyEvent if needed, or rely on duck typing
+                if handler(event):
+                    logger.debug(f"Key event {event.key()} consumed by handler: {handler}")
+                    return True
+        return super().eventFilter(watched, event)
 
     # -- utility methods ---------------------------------------------------
 

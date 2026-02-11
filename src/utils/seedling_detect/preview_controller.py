@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 # -- Layer name constants ---------------------------------------------------
-PREVIEW_LAYER_NAME = "Preview"
+PREVIEW_LAYER_NAME = "Preview Regions"
 PREVIEW_RESULT_LAYER_NAME = "Preview Result"
 
 
@@ -60,6 +60,7 @@ class SeedlingPreviewController(QObject):
 
     sigPreviewBoxLocked = Signal(float, float, float, float)
     sigPreviewSizeChanged = Signal(int)
+    sigRequestPreviewModeStop = Signal()
 
     def __init__(self, map_canvas: MapCanvas) -> None:
         super().__init__(map_canvas)
@@ -212,13 +213,21 @@ class SeedlingPreviewController(QObject):
         bool
             True if the event was consumed by preview logic.
         """
+        logger.debug(f"PreviewController received key: {event.key()} (enabled={self._preview_mode_enabled})")
         if not self._preview_mode_enabled:
             return False
+        if event.key() == Qt.Key.Key_Escape:
+            logger.debug("Escape key detected, stopping preview mode")
+            self.sigRequestPreviewModeStop.emit()
+            event.accept()
+            return True
         if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            logger.debug("Plus/Equal key detected, increasing size")
             self.adjust_preview_box_size(delta=32)
             event.accept()
             return True
         if event.key() == Qt.Key.Key_Minus:
+            logger.debug("Minus key detected, decreasing size")
             self.adjust_preview_box_size(delta=-32)
             event.accept()
             return True
