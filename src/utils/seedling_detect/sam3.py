@@ -41,6 +41,7 @@ def run_preview_inference(
     iou: float,
     cache_dir: str | None = None,
     _predictor_override: Any | None = None,
+    predictor: Any | None = None,
 ) -> dict[str, Any]:
     """Run SAM3 preview inference and return polygon masks.
 
@@ -58,15 +59,18 @@ def run_preview_inference(
         IoU threshold.
     _predictor_override : Any | None, optional
         Internal parameter for testing dependency injection.
+    predictor : Any | None, optional
+        Reusable predictor instance for multi-slice loops.
     """
     prepared_image = _prepare_preview_image(image_rgb)
-    predictor = _build_semantic_predictor(
-        weight_path,
-        conf,
-        iou,
-        cache_dir,
-        _predictor_override,
-    )
+    if predictor is None:
+        predictor = build_semantic_predictor(
+            weight_path=weight_path,
+            conf=conf,
+            iou=iou,
+            cache_dir=cache_dir,
+            _predictor_override=_predictor_override,
+        )
     predictor.set_image(prepared_image)
     results = predictor(text=[prompt])
     if not isinstance(results, (list, tuple)):
@@ -110,6 +114,7 @@ def run_slice_inference(
     iou: float,
     cache_dir: str | None = None,
     _predictor_override: Any | None = None,
+    predictor: Any | None = None,
 ) -> dict[str, Any]:
     """Run one slice inference and return polygons, boxes, and scores.
 
@@ -138,6 +143,7 @@ def run_slice_inference(
         iou=iou,
         cache_dir=cache_dir,
         _predictor_override=_predictor_override,
+        predictor=predictor,
     )
     polygons_px = preview_data["polygons_px"]
     boxes_xyxy = polygons_to_boxes_xyxy(polygons_px)
@@ -222,6 +228,23 @@ def _build_semantic_predictor(
         "verbose": False,
     }
     return predictor_type(overrides=overrides)
+
+
+def build_semantic_predictor(
+    weight_path: str,
+    conf: float,
+    iou: float,
+    cache_dir: str | None,
+    _predictor_override: Any | None = None,
+) -> Any:
+    """Public helper to build one reusable SAM3 predictor instance."""
+    return _build_semantic_predictor(
+        weight_path=weight_path,
+        conf=conf,
+        iou=iou,
+        cache_dir=cache_dir,
+        _predictor_override=_predictor_override,
+    )
 
 
 def _resolve_preview_project_dir(cache_dir: str | None) -> Path:

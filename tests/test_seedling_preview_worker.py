@@ -92,3 +92,54 @@ def test_seedling_inference_worker_emits_progress_and_finished(tmp_path) -> None
     assert progress_values[0] == 0
     assert progress_values[-1] == 100
     assert finished_payload
+
+
+def test_seedling_inference_worker_reuses_predictor_across_windows(tmp_path) -> None:
+    """Full-map worker should initialize predictor only once."""
+    dom_path = tmp_path / "demo_reuse.tif"
+    data = np.zeros((3, 32, 32), dtype=np.uint8)
+    transform = Affine(1, 0, 0, 0, -1, 32)
+    with rasterio.open(
+        dom_path,
+        "w",
+        driver="GTiff",
+        height=32,
+        width=32,
+        count=3,
+        dtype=data.dtype,
+        transform=transform,
+    ) as dataset:
+        dataset.write(data)
+
+    init_counter = {"count": 0}
+
+    class _CountingPredictor:
+        def __init__(self, overrides):
+            _ = overrides
+            init_counter["count"] += 1
+
+        def set_image(self, image_rgb):
+            self.image = image_rgb
+
+        def __call__(self, text):
+            _ = text
+            result = _DummyResult(
+                masks=_DummyMasks(xy=[np.array([[0, 0], [8, 0], [8, 8]])]),
+                boxes=_DummyBoxes(conf=np.array([0.9], dtype=float)),
+            )
+            return [result]
+
+    payload = SeedlingInferenceInput(
+        dom_path=str(dom_path),
+        weight_path="fake.pt",
+        prompt="plants",
+        conf=0.25,
+        iou=0.45,
+        slice_size=16,
+        overlap_ratio=0.0,
+    )
+    worker = SeedlingInferenceWorker(payload, predictor_factory=_CountingPredictor)
+
+    worker.run()
+
+    assert init_counter["count"] == 1

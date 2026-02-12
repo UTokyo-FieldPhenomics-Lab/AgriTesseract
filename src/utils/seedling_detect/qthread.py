@@ -16,7 +16,7 @@ import rasterio
 from src.utils.seedling_detect.slice import SliceWindow, generate_slice_windows
 from src.utils.seedling_detect.sam3 import run_preview_inference
 from src.utils.seedling_detect.preview import polygon_px_to_geo
-from src.utils.seedling_detect.sam3 import run_slice_inference
+from src.utils.seedling_detect.sam3 import build_semantic_predictor, run_slice_inference
 
 
 @dataclass
@@ -151,6 +151,13 @@ class SeedlingInferenceWorker(QObject):
         """Infer all windows and collect per-slice outputs."""
         total = max(1, len(windows))
         slice_results: list[dict] = []
+        predictor = build_semantic_predictor(
+            weight_path=self.payload.weight_path,
+            conf=self.payload.conf,
+            iou=self.payload.iou,
+            cache_dir=self.payload.cache_dir,
+            _predictor_override=self._predictor_factory,
+        )
         for idx, window in enumerate(windows):
             if self._cancelled:
                 return {"slices": slice_results}
@@ -162,7 +169,7 @@ class SeedlingInferenceWorker(QObject):
                 conf=self.payload.conf,
                 iou=self.payload.iou,
                 cache_dir=self.payload.cache_dir,
-                _predictor_override=self._predictor_factory,
+                predictor=predictor,
             )
             slice_results.append(_build_slice_result(result, transform, window))
             percent = int(((idx + 1) / total) * 100)
@@ -180,10 +187,10 @@ class SeedlingInferenceWorker(QObject):
 def _read_window_image(dataset, window: SliceWindow) -> tuple[np.ndarray, Affine]:
     """Read one slice image and its local affine transform."""
     raster_window = Window(
-        col_off=window.x0,
-        row_off=window.y0,
-        width=window.x1 - window.x0,
-        height=window.y1 - window.y0,
+        window.x0,
+        window.y0,
+        window.x1 - window.x0,
+        window.y1 - window.y0,
     )
     image = dataset.read(window=raster_window, boundless=True)
     image = np.transpose(image, (1, 2, 0))
@@ -199,10 +206,18 @@ def _boxes_px_to_geo(boxes_xyxy: np.ndarray, transform: Affine) -> np.ndarray:
         return np.zeros((0, 4), dtype=float)
     box_rows: list[list[float]] = []
     for x0, y0, x1, y1 in boxes_xyxy:
-        gx0, gy0 = transform * (float(x0), float(y0))
-        gx1, gy1 = transform * (float(x1), float(y1))
+        gx0, gy0 = _affine_xy(transform, float(x0), float(y0))
+        gx1, gy1 = _affine_xy(transform, float(x1), float(y1))
         box_rows.append([min(gx0, gx1), min(gy0, gy1), max(gx0, gx1), max(gy0, gy1)])
     return np.asarray(box_rows, dtype=float)
+
+
+def _affine_xy(
+    transform: Affine, x_value: float, y_value: float
+) -> tuple[float, float]:
+    """Apply affine transform and return x/y as floats."""
+    point_xy = transform * (x_value, y_value)
+    return float(point_xy[0]), float(point_xy[1])
 
 
 def _build_slice_result(result: dict, transform: Affine, window: SliceWindow) -> dict:
