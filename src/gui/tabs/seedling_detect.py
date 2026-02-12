@@ -46,7 +46,7 @@ def seedling_top_tab_keys() -> tuple[str, ...]:
         "page.seedling.tab.sam3_params",
         "page.seedling.tab.sam3_preview",
         "page.seedling.tab.slice_infer",
-        "page.seedling.tab.points",
+        "page.seedling.tab.slice_infer",
     )
 
 
@@ -158,11 +158,6 @@ class SeedlingTab(TabInterface):
                 "seedlingSliceInferTab",
                 self._build_slice_infer_tab(),
                 seedling_top_tab_keys()[3],
-            ),
-            (
-                "seedlingPointsTab",
-                self._build_points_tab(),
-                seedling_top_tab_keys()[4],
             ),
         ]
         self.tab_file = tab_definitions[0][1]
@@ -280,48 +275,16 @@ class SeedlingTab(TabInterface):
         bar = self._new_command_bar()
         bar.addWidget(self._build_execute_section())
         bar.addSeparator()
-        bar.addWidget(self._build_cache_section())
+        
+        self.btn_save_shp = PrimaryPushButton(tr("page.seedling.btn.save_shp"))
+        self.btn_save_shp.clicked.connect(self.sigSavePoints.emit)
+        
+        bar.addWidget(self.btn_save_shp)
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
         return tab
 
-    def _build_points_tab(self) -> QWidget:
-        """Build point tab with command bar sections."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 0, 0, 0)
-        bar = self._new_command_bar()
 
-        self.btn_view = PushButton(tr("page.seedling.btn.view"))
-        self.btn_view.setCheckable(True)
-        self.btn_view.setChecked(True)
-        bar.addWidget(self.btn_view)
-
-        self.btn_add = PushButton(tr("page.seedling.btn.add"))
-        self.btn_add.setCheckable(True)
-        bar.addWidget(self.btn_add)
-
-        self.btn_move = PushButton(tr("page.seedling.btn.move"))
-        self.btn_move.setCheckable(True)
-        bar.addWidget(self.btn_move)
-
-        self.btn_delete = PushButton(tr("page.seedling.btn.delete"))
-        self.btn_delete.setCheckable(True)
-        bar.addWidget(self.btn_delete)
-
-        bar.addSeparator()
-
-        self.btn_undo = PushButton(tr("page.seedling.btn.undo"))
-        bar.addWidget(self.btn_undo)
-
-        bar.addSeparator()
-
-        self.btn_save_points = PrimaryPushButton(tr("page.common.save"))
-        self.btn_save_points.clicked.connect(self.sigSavePoints.emit)
-        bar.addWidget(self.btn_save_points)
-        bar.addWidget(self._bar_spacer())
-        layout.addWidget(bar)
-        return tab
 
     def _build_model_section(self) -> QWidget:
         """Build model parameter section widget."""
@@ -550,13 +513,14 @@ class SeedlingTab(TabInterface):
         self.spin_slice_size.setValue(640)
         self.spin_slice_size.setSingleStep(64)
 
+
         self.spin_overlap = DoubleSpinBox()
         self.spin_overlap.setRange(0.0, 0.8)
         self.spin_overlap.setValue(0.2)
         self.spin_overlap.setSingleStep(0.05)
         
-        self.spin_overlap.setValue(0.2)
-        self.spin_overlap.setSingleStep(0.05)
+        self.btn_start_inference = PrimaryPushButton(tr("page.seedling.btn.start_inference"))
+        self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
         
         self.btn_slice_preview = PushButton(tr("page.seedling.btn.slice_preview"))
         self.btn_slice_preview.setCheckable(True)
@@ -573,26 +537,10 @@ class SeedlingTab(TabInterface):
             self._build_labeled_spin("page.seedling.label.overlap", self.spin_overlap)
         )
         layout.addWidget(self.btn_slice_preview)
+        layout.addWidget(self.btn_start_inference)
         return wrapper
 
-    def _build_cache_section(self) -> QWidget:
-        """Build save/load cache section widget."""
-        self.btn_start_inference = PrimaryPushButton(tr("page.seedling.btn.start_inference"))
-        self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
-        
-        self.btn_save_cache = PushButton(tr("page.seedling.btn.save_cache"))
-        self.btn_save_cache.clicked.connect(self.sigSaveCache.emit)
-        self.btn_load_cache = PushButton(tr("page.seedling.btn.load_cache"))
-        self.btn_load_cache.clicked.connect(self.sigLoadCache.emit)
-        
-        wrapper = QWidget()
-        layout = QHBoxLayout(wrapper)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        layout.addWidget(self.btn_start_inference)
-        layout.addWidget(self.btn_save_cache)
-        layout.addWidget(self.btn_load_cache)
-        return wrapper
+
 
     @Slot()
     def _on_load_dom(self) -> None:
@@ -655,10 +603,13 @@ class SeedlingTab(TabInterface):
         self.btn_slice_preview.setEnabled(is_preview_ready)
         self.btn_start_inference.setEnabled(is_preview_ready)
         
-        # Cache buttons require DOM (to associate?) or Weights? 
-        # Usually cache saves detection results, so it needs DOM context.
-        self.btn_save_cache.setEnabled(is_dom_ready)
-        self.btn_load_cache.setEnabled(is_dom_ready)
+        self.btn_start_inference.setEnabled(is_preview_ready)
+        
+        # Save SHP should be enabled if we have points? Or always?
+        # Usually checking if there are points to save is better, but here we stick to basic logic.
+        # It handles "save points" which might be available after inference.
+        # For now, let's enable it if DOM is ready (assuming workflow flow).
+        self.btn_save_shp.setEnabled(is_dom_ready)
 
         if not is_weight_ready:
             InfoBar.warning(
