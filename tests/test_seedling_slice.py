@@ -1,8 +1,13 @@
 """Tests for seedling slice and geometry helpers."""
 
 import numpy as np
+from affine import Affine
 
-from src.utils.seedling_detect.slice import bbox_centers_xyxy, generate_slice_windows
+from src.utils.seedling_detect.slice import (
+    bbox_centers_xyxy,
+    filter_slice_windows_by_boundary,
+    generate_slice_windows,
+)
 
 
 def test_generate_slice_windows_cover_image_extent() -> None:
@@ -29,3 +34,27 @@ def test_bbox_centers_xyxy_calculates_center_points() -> None:
     assert centers_xy.shape == (2, 2)
     assert np.allclose(centers_xy[0], [2.0, 1.0])
     assert np.allclose(centers_xy[1], [4.0, 4.0])
+
+
+def test_filter_slice_windows_keeps_intersect_and_inside() -> None:
+    """Boundary filtering keeps expected windows for each mode."""
+    windows = generate_slice_windows(100, 100, 40, 0.0)
+    boundary_xy = np.array(
+        [[20.0, 20.0], [80.0, 20.0], [80.0, 80.0], [20.0, 80.0]],
+        dtype=float,
+    )
+    filtered_intersect = filter_slice_windows_by_boundary(
+        windows=windows,
+        transform=Affine.identity(),
+        boundary_xy=boundary_xy,
+        mode="intersect",
+    )
+    filtered_inside = filter_slice_windows_by_boundary(
+        windows=windows,
+        transform=Affine.identity(),
+        boundary_xy=boundary_xy,
+        mode="inside",
+    )
+
+    assert len(filtered_intersect) >= len(filtered_inside)
+    assert len(filtered_inside) > 0

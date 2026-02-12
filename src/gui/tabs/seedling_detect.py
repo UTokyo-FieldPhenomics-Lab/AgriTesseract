@@ -33,6 +33,7 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.config import cfg, tr
+from src.utils.subplot_generate.io import load_boundary_roi
 from src.utils.seedling_detect.qthread import (
     PreviewInferenceInput,
     SeedlingPreviewWorker,
@@ -66,40 +67,34 @@ class SeedlingTab(TabInterface):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._dom_path: str = ""
+        self._boundary_roi = None
+        self._boundary_file_path: str = ""
         self._preview_thread: Optional[QThread] = None
         self._preview_worker: Optional[SeedlingPreviewWorker] = None
         self.stateTooltip: Optional[StateToolTip] = None
         self._init_controls()
         self._connect_preview_interaction()
         self._update_button_states()
-        cfg.sam3WeightPath.valueChanged.connect(
-            lambda _: self._update_button_states()
-        )
+        cfg.sam3WeightPath.valueChanged.connect(lambda _: self._update_button_states())
 
     def _connect_preview_interaction(self) -> None:
         """Connect preview controls with map canvas interactions."""
         map_canvas = self.map_component.map_canvas
         self._preview_ctrl = SeedlingPreviewController(map_canvas)
         map_canvas._key_handlers.append(self._preview_ctrl.handle_key_press)
-        map_canvas._hover_handlers.append(
-            self._preview_ctrl.handle_coordinate_hover
-        )
+        map_canvas._hover_handlers.append(self._preview_ctrl.handle_coordinate_hover)
         map_canvas._click_handlers.append(self._preview_ctrl.handle_click)
-        self.sigPreviewModeToggled.connect(
-            self._preview_ctrl.set_preview_mode_enabled
+        self.sigPreviewModeToggled.connect(self._preview_ctrl.set_preview_mode_enabled)
+        self.spin_preview_size.valueChanged.connect(
+            self._preview_ctrl.set_preview_box_size
         )
-        self.spin_preview_size.valueChanged.connect(self._preview_ctrl.set_preview_box_size)
         self.spin_preview_size.valueChanged.connect(self._sync_slice_size)
         self._preview_ctrl.sigPreviewSizeChanged.connect(self.sync_preview_size)
-        self._preview_ctrl.sigPreviewBoxLocked.connect(
-            self._on_preview_locked
-        )
+        self._preview_ctrl.sigPreviewBoxLocked.connect(self._on_preview_locked)
         self._preview_ctrl.sigRequestPreviewModeStop.connect(
             self._on_request_stop_preview
         )
-        self._preview_ctrl.set_preview_box_size(
-            self.spin_preview_size.value()
-        )
+        self._preview_ctrl.set_preview_box_size(self.spin_preview_size.value())
 
     @Slot(float, float, float, float)
     def _on_preview_locked(
@@ -192,13 +187,13 @@ class SeedlingTab(TabInterface):
         widget = self.stacked_widget.widget(index)
         if widget is None:
             return
-        
+
         # Toggle preview layers visibility: only visible in Preview tab
-        is_preview_tab = (widget.objectName() == "seedlingSam3PreviewTab")
+        is_preview_tab = widget.objectName() == "seedlingSam3PreviewTab"
         self._preview_ctrl.set_preview_layers_visibility(is_preview_tab)
 
         # Toggle slice grid visibility: only visible in Slice Inference tab
-        is_slice_tab = (widget.objectName() == "seedlingSliceInferTab")
+        is_slice_tab = widget.objectName() == "seedlingSliceInferTab"
         self._preview_ctrl.set_slice_grid_visibility(is_slice_tab)
 
         self.nav.setCurrentItem(widget.objectName())
@@ -275,12 +270,19 @@ class SeedlingTab(TabInterface):
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(0, 0, 0, 0)
         bar = self._new_command_bar()
+        self.btn_load_boundary = PushButton(tr("page.seedling.btn.load_boundary"))
+        self.btn_load_boundary.clicked.connect(self._on_load_boundary)
+        self.label_boundary = BodyLabel(tr("page.seedling.label.no_boundary"))
+        self.label_boundary.setMinimumWidth(220)
+        bar.addWidget(self.btn_load_boundary)
+        bar.addWidget(self.label_boundary)
+        bar.addSeparator()
         bar.addWidget(self._build_execute_section())
         bar.addSeparator()
-        
+
         self.btn_save_shp = PrimaryPushButton(tr("page.seedling.btn.save_shp"))
         self.btn_save_shp.clicked.connect(self.sigSavePoints.emit)
-        
+
         bar.addWidget(self.btn_save_shp)
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
@@ -364,7 +366,7 @@ class SeedlingTab(TabInterface):
             self.btn_pick_preview.setText(tr("page.seedling.btn.pick_preview"))
             self._preview_ctrl.clear_preview_result_layer()
         self.sigPreviewModeToggled.emit(checked)
-    
+
     @Slot(bool)
     def _on_slice_preview_toggled(self, checked: bool) -> None:
         """Handle slice preview toggle."""
@@ -372,10 +374,69 @@ class SeedlingTab(TabInterface):
             self.btn_slice_preview.setText(tr("page.seedling.btn.slice_preview_stop"))
             size = self.spin_slice_size.value()
             overlap = self.spin_overlap.value()
-            self._preview_ctrl.show_slice_grid(size, overlap)
+            boundary_xy = self._get_boundary_xy()
+            boundary_mode = self._slice_boundary_mode()
+            self._preview_ctrl.show_slice_grid(
+                size,
+                overlap,
+                boundary_xy=boundary_xy,
+                boundary_mode=boundary_mode,
+            )
         else:
             self.btn_slice_preview.setText(tr("page.seedling.btn.slice_preview"))
             self._preview_ctrl.clear_slice_grid_layer()
+
+    def _get_boundary_xy(self) -> Optional[list[list[float]]]:
+        """Return boundary coordinates from loaded ROI for filtering."""
+        if self._boundary_roi is None:
+            return None
+        if len(self._boundary_roi) != 1:
+            return None
+        coords = next(iter(self._boundary_roi.values()))
+        return coords[:, :2].tolist()
+
+    def _slice_boundary_mode(self) -> str:
+        """Return boundary mode for slice filtering."""
+        if self._boundary_roi is None:
+            return "all"
+        return "intersect"
+
+    @Slot()
+    def _on_load_boundary(self) -> None:
+        """Load boundary shapefile for slice filtering."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("page.seedling.dialog.load_boundary"),
+            "",
+            "Shapefile (*.shp);;All Files (*)",
+        )
+        if not file_path:
+            return
+        try:
+            self._boundary_roi = load_boundary_roi(file_path)
+        except Exception as exc:
+            logger.exception("Failed to load seedling boundary")
+            InfoBar.error(
+                title=tr("error"),
+                content=f"{tr('page.seedling.msg.boundary_invalid')}: {exc}",
+                parent=self,
+                duration=3500,
+            )
+            return
+        self._boundary_file_path = file_path
+        self.label_boundary.setText(Path(file_path).name)
+        self.map_component.map_canvas.add_vector_layer(
+            self._boundary_roi,
+            "Boundary",
+            color="#FF0000",
+            width=2,
+        )
+        InfoBar.success(
+            title=tr("success"),
+            content=tr("page.seedling.msg.boundary_loaded"),
+            parent=self,
+            duration=1800,
+        )
 
     @Slot()
     def _on_preview_inference_clicked(self) -> None:
@@ -460,7 +521,7 @@ class SeedlingTab(TabInterface):
             if self.stateTooltip:
                 self.stateTooltip.setState(True)
                 self.stateTooltip = None
-            
+
             self.stateTooltip = StateToolTip(
                 tr("info"),
                 tr("page.seedling.msg.preview_running"),
@@ -491,7 +552,9 @@ class SeedlingTab(TabInterface):
         self._preview_ctrl.show_preview_result_polygons(polygons_geo)
 
         if self.stateTooltip:
-            self.stateTooltip.setContent(tr("page.seedling.msg.preview_finished") + " 😆")
+            self.stateTooltip.setContent(
+                tr("page.seedling.msg.preview_finished") + " 😆"
+            )
             self.stateTooltip.setState(True)
             self.stateTooltip = None
 
@@ -538,16 +601,17 @@ class SeedlingTab(TabInterface):
         self.spin_slice_size.setValue(640)
         self.spin_slice_size.setSingleStep(64)
 
-
         self.spin_overlap = DoubleSpinBox()
         self.spin_overlap.setRange(0.0, 0.8)
         self.spin_overlap.setValue(0.2)
         self.spin_overlap.setSingleStep(0.05)
-        
-        self.btn_start_inference = PrimaryPushButton(tr("page.seedling.btn.start_inference"))
+
+        self.btn_start_inference = PrimaryPushButton(
+            tr("page.seedling.btn.start_inference")
+        )
         self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
         self.btn_start_inference.setEnabled(False)
-        
+
         self.btn_slice_preview = PushButton(tr("page.seedling.btn.slice_preview"))
         self.btn_slice_preview.setCheckable(True)
         self.btn_slice_preview.toggled.connect(self._on_slice_preview_toggled)
@@ -565,7 +629,6 @@ class SeedlingTab(TabInterface):
         layout.addWidget(self.btn_slice_preview)
         layout.addWidget(self.btn_start_inference)
         return wrapper
-
 
     @Slot()
     def _on_load_dom(self) -> None:
@@ -595,10 +658,10 @@ class SeedlingTab(TabInterface):
                 duration=3500,
             )
             return
-        
+
         # DOM loaded successfully
         self._update_button_states()
-        
+
         map_canvas.zoom_to_layer(Path(file_path).stem)
         InfoBar.success(
             title=tr("success"),
@@ -617,19 +680,19 @@ class SeedlingTab(TabInterface):
 
         # Buttons that require model weights only (file agnostic or file tab specific?)
         # Actually most require DOM.
-        
+
         # Preview tab buttons require DOM + Weights
         is_preview_ready = is_weight_ready and is_dom_ready
-        
+
         self.btn_pick_preview.setEnabled(is_preview_ready)
         self.btn_preview_detect.setEnabled(is_preview_ready)
-        
+
         # Slice inference require DOM + Weights
         self.btn_slice_preview.setEnabled(is_preview_ready)
         self.btn_start_inference.setEnabled(is_preview_ready)
-        
+
         self.btn_start_inference.setEnabled(is_preview_ready)
-        
+
         # Save SHP should be enabled if we have points? Or always?
         # Usually checking if there are points to save is better, but here we stick to basic logic.
         # It handles "save points" which might be available after inference.

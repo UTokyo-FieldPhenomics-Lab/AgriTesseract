@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from affine import Affine
+from shapely.geometry import Polygon
 
 
 @dataclass
@@ -105,3 +107,56 @@ def bbox_centers_xyxy(boxes_xyxy: np.ndarray) -> np.ndarray:
     centers_x = (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) * 0.5
     centers_y = (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) * 0.5
     return np.stack([centers_x, centers_y], axis=1)
+
+
+def _window_to_geo_polygon(window: SliceWindow, transform: Affine) -> Polygon:
+    """Convert one pixel window to geo polygon."""
+    x_tl, y_tl = transform * (window.x0, window.y0)
+    x_tr, y_tr = transform * (window.x1, window.y0)
+    x_br, y_br = transform * (window.x1, window.y1)
+    x_bl, y_bl = transform * (window.x0, window.y1)
+    return Polygon(
+        [
+            (float(x_tl), float(y_tl)),
+            (float(x_tr), float(y_tr)),
+            (float(x_br), float(y_br)),
+            (float(x_bl), float(y_bl)),
+        ]
+    )
+
+
+def filter_slice_windows_by_boundary(
+    windows: list[SliceWindow],
+    transform: Affine,
+    boundary_xy: np.ndarray | None,
+    mode: str,
+) -> list[SliceWindow]:
+    """Filter slice windows against a boundary polygon.
+
+    Parameters
+    ----------
+    windows : list[SliceWindow]
+        Input slice windows.
+    transform : affine.Affine
+        Pixel-to-geo transform.
+    boundary_xy : numpy.ndarray | None
+        Boundary coordinates with shape ``(N, 2)``.
+    mode : str
+        ``"inside"`` keeps only fully inside windows.
+        ``"intersect"`` keeps intersecting windows.
+    """
+    if boundary_xy is None or np.asarray(boundary_xy).shape[0] < 3:
+        return windows
+    boundary_poly = Polygon(np.asarray(boundary_xy, dtype=float))
+    if boundary_poly.is_empty:
+        return windows
+    keep_inside = mode == "inside"
+    kept_windows: list[SliceWindow] = []
+    for window in windows:
+        window_poly = _window_to_geo_polygon(window, transform)
+        if keep_inside and window_poly.within(boundary_poly):
+            kept_windows.append(window)
+            continue
+        if not keep_inside and window_poly.intersects(boundary_poly):
+            kept_windows.append(window)
+    return kept_windows

@@ -26,6 +26,10 @@ from src.utils.seedling_detect.preview import (
     pixel_square_bounds_from_geo_center,
     preview_bounds_from_center,
 )
+from src.utils.seedling_detect.slice import (
+    filter_slice_windows_by_boundary,
+    generate_slice_windows,
+)
 
 if TYPE_CHECKING:
     from src.gui.components.map_canvas import MapCanvas
@@ -76,9 +80,7 @@ class SeedlingPreviewController(QObject):
 
         # -- preview box overlay (dashed rect) ------------------------------
         self._preview_box_item = pg.PlotCurveItem(
-            pen=pg.mkPen(
-                color="#00AAFF", width=2, style=Qt.PenStyle.DashLine
-            ),
+            pen=pg.mkPen(color="#00AAFF", width=2, style=Qt.PenStyle.DashLine),
             connect="finite",
         )
         self._preview_box_item.setVisible(False)
@@ -214,7 +216,13 @@ class SeedlingPreviewController(QObject):
         if PREVIEW_RESULT_LAYER_NAME in self._canvas._layers:
             self._canvas.set_layer_visibility(PREVIEW_RESULT_LAYER_NAME, visible)
 
-    def show_slice_grid(self, slice_size: int, overlap: float) -> None:
+    def show_slice_grid(
+        self,
+        slice_size: int,
+        overlap: float,
+        boundary_xy: list[list[float]] | None = None,
+        boundary_mode: str = "all",
+    ) -> None:
         """Generate and show slice grid based on current DOM.
 
         Parameters
@@ -223,6 +231,10 @@ class SeedlingPreviewController(QObject):
             Size of slice windows in pixels.
         overlap : float
             Overlap ratio (0.0 to 1.0).
+        boundary_xy : list[list[float]] | None, optional
+            Optional boundary polygon used to filter windows.
+        boundary_mode : str, optional
+            One of ``all``, ``intersect``, ``inside``.
         """
         dataset = self._active_raster_dataset()
         if dataset is None:
@@ -231,37 +243,39 @@ class SeedlingPreviewController(QObject):
 
         self.clear_slice_grid_layer()
 
-        width = dataset.width
-        height = dataset.height
+        image_width = dataset.width
+        image_height = dataset.height
         transform = dataset.transform
-        step = int(slice_size * (1 - overlap))
-        if step <= 0:
-            step = slice_size
-
+        windows = generate_slice_windows(
+            image_width=image_width,
+            image_height=image_height,
+            slice_size=slice_size,
+            overlap_ratio=overlap,
+        )
+        if boundary_mode in {"intersect", "inside"}:
+            windows = filter_slice_windows_by_boundary(
+                windows=windows,
+                transform=transform,
+                boundary_xy=None if boundary_xy is None else np.asarray(boundary_xy),
+                mode=boundary_mode,
+            )
         polygons_geo = []
-        for y in range(0, height, step):
-            for x in range(0, width, step):
-                # Calculate simple window
-                w = min(slice_size, width - x)
-                h = min(slice_size, height - y)
-                
-                # Get geo coordinates
-                # Pixel (col, row) -> Geo (x, y)
-                # (x, y) is top-left in raster space
-                x_tl, y_tl = transform * (x, y)
-                x_br, y_br = transform * (x + w, y + h)
-                x_tr, y_tr = transform * (x + w, y)
-                x_bl, y_bl = transform * (x, y + h)
-
-                # Create polygon (closed loop)
-                poly = np.array([
-                    [x_tl, y_tl],
-                    [x_tr, y_tr],
-                    [x_br, y_br],
-                    [x_bl, y_bl],
-                    [x_tl, y_tl]
-                ])
-                polygons_geo.append(poly)
+        for window in windows:
+            x_tl, y_tl = transform * (window.x0, window.y0)
+            x_br, y_br = transform * (window.x1, window.y1)
+            x_tr, y_tr = transform * (window.x1, window.y0)
+            x_bl, y_bl = transform * (window.x0, window.y1)
+            polygons_geo.append(
+                np.array(
+                    [
+                        [x_tl, y_tl],
+                        [x_tr, y_tr],
+                        [x_br, y_br],
+                        [x_bl, y_bl],
+                        [x_tl, y_tl],
+                    ]
+                )
+            )
 
         if not polygons_geo:
             return
@@ -299,7 +313,9 @@ class SeedlingPreviewController(QObject):
         bool
             True if the event was consumed by preview logic.
         """
-        logger.debug(f"PreviewController received key: {event.key()} (enabled={self._preview_mode_enabled})")
+        logger.debug(
+            f"PreviewController received key: {event.key()} (enabled={self._preview_mode_enabled})"
+        )
         if not self._preview_mode_enabled or not self._layers_visible:
             return False
         if event.key() == Qt.Key.Key_Escape:
@@ -319,9 +335,7 @@ class SeedlingPreviewController(QObject):
             return True
         return False
 
-    def handle_coordinate_hover(
-        self, x_coord: float, y_coord: float
-    ) -> None:
+    def handle_coordinate_hover(self, x_coord: float, y_coord: float) -> None:
         """Update preview overlay on mouse hover.
 
         Parameters
@@ -331,15 +345,11 @@ class SeedlingPreviewController(QObject):
         """
         if not self._preview_mode_enabled or not self._layers_visible:
             return
-        item_pos = self._canvas._item_group.mapFromParent(
-            QPointF(x_coord, y_coord)
-        )
+        item_pos = self._canvas._item_group.mapFromParent(QPointF(x_coord, y_coord))
         self._preview_hover_center = (item_pos.x(), item_pos.y())
         self._update_preview_overlay()
 
-    def handle_click(
-        self, x_pos: float, y_pos: float, button: Qt.MouseButton
-    ) -> bool:
+    def handle_click(self, x_pos: float, y_pos: float, button: Qt.MouseButton) -> bool:
         """Handle canvas click for preview locking.
 
         Parameters
@@ -367,9 +377,7 @@ class SeedlingPreviewController(QObject):
 
     def _preview_bounds(self) -> tuple[float, float, float, float]:
         """Get current preview bounds from active center."""
-        center_xy = (
-            self._preview_locked_center or self._preview_hover_center
-        )
+        center_xy = self._preview_locked_center or self._preview_hover_center
         if center_xy is None:
             return 0.0, 0.0, 0.0, 0.0
         active_dataset = self._active_raster_dataset()
@@ -423,26 +431,23 @@ class SeedlingPreviewController(QObject):
         if not self._preview_mode_enabled or not self._layers_visible:
             self._preview_box_item.setVisible(False)
             return
-        center_xy = (
-            self._preview_locked_center or self._preview_hover_center
-        )
+        center_xy = self._preview_locked_center or self._preview_hover_center
         if center_xy is None:
             self._preview_box_item.setVisible(False)
             return
         x_min, y_min, x_max, y_max = self._preview_bounds()
-        x_values = np.asarray(
-            [x_min, x_max, x_max, x_min, x_min], dtype=float
-        )
-        y_values = np.asarray(
-            [y_min, y_min, y_max, y_max, y_min], dtype=float
-        )
+        x_values = np.asarray([x_min, x_max, x_max, x_min, x_min], dtype=float)
+        y_values = np.asarray([y_min, y_min, y_max, y_max, y_min], dtype=float)
         self._preview_box_item.setData(x=x_values, y=y_values)
         self._update_preview_layer_bounds(x_min, y_min, x_max, y_max)
         self._preview_box_item.setVisible(True)
 
     def _update_preview_layer_bounds(
         self,
-        x_min: float, y_min: float, x_max: float, y_max: float,
+        x_min: float,
+        y_min: float,
+        x_max: float,
+        y_max: float,
     ) -> None:
         """Sync preview layer bounds in canvas layer registry."""
         from src.gui.components.map_canvas import LayerBounds
@@ -451,7 +456,10 @@ class SeedlingPreviewController(QObject):
         if preview_layer is None:
             return
         preview_layer["bounds"] = LayerBounds(
-            left=x_min, bottom=y_min, right=x_max, top=y_max,
+            left=x_min,
+            bottom=y_min,
+            right=x_max,
+            top=y_max,
         )
 
     def _add_polygon_to_group(
@@ -491,21 +499,19 @@ class SeedlingPreviewController(QObject):
     ) -> None:
         """Add a single polygon with random color to the group."""
         import random
+
         path = QPainterPath()
         path.moveTo(float(poly_xy[0, 0]), float(poly_xy[0, 1]))
         for point_xy in poly_xy[1:]:
             path.lineTo(float(point_xy[0]), float(point_xy[1]))
         path.closeSubpath()
         graphics_item = QGraphicsPathItem(path)
-        
+
         # Random color with 50% alpha (128)
         color = QColor(
-            random.randint(0, 255),
-            random.randint(0, 255),
-            random.randint(0, 255),
-            128
+            random.randint(0, 255), random.randint(0, 255), random.randint(0, 255), 128
         )
-        
+
         # Solid border
         pen = QPen(color, 2)
         pen.setCosmetic(True)
@@ -528,9 +534,7 @@ class SeedlingPreviewController(QObject):
             "bounds": bounds,
         }
         self._canvas._layer_order.append(PREVIEW_RESULT_LAYER_NAME)
-        self._canvas.sigLayerAdded.emit(
-            PREVIEW_RESULT_LAYER_NAME, "Vector"
-        )
+        self._canvas.sigLayerAdded.emit(PREVIEW_RESULT_LAYER_NAME, "Vector")
 
     def _register_slice_grid_layer(
         self,
@@ -547,9 +551,7 @@ class SeedlingPreviewController(QObject):
             "bounds": bounds,
         }
         self._canvas._layer_order.append(SLICE_GRID_LAYER_NAME)
-        self._canvas.sigLayerAdded.emit(
-            SLICE_GRID_LAYER_NAME, "Vector"
-        )
+        self._canvas.sigLayerAdded.emit(SLICE_GRID_LAYER_NAME, "Vector")
 
     @staticmethod
     def _polygon_bounds(
@@ -561,9 +563,7 @@ class SeedlingPreviewController(QObject):
         if not polygons_geo:
             return None
         coords = [
-            np.asarray(poly, dtype=float)
-            for poly in polygons_geo
-            if len(poly) >= 3
+            np.asarray(poly, dtype=float) for poly in polygons_geo if len(poly) >= 3
         ]
         if not coords:
             return None
