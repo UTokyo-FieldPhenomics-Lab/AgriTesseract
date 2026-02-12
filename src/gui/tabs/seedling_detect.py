@@ -35,6 +35,8 @@ from src.gui.components.base_interface import TabInterface
 from src.gui.config import cfg, tr
 from src.utils.subplot_generate.io import load_boundary_roi
 from src.utils.seedling_detect.qthread import (
+    SeedlingInferenceInput,
+    SeedlingInferenceWorker,
     PreviewInferenceInput,
     SeedlingPreviewWorker,
 )
@@ -48,7 +50,7 @@ def seedling_top_tab_keys() -> tuple[str, ...]:
         "page.seedling.tab.sam3_params",
         "page.seedling.tab.sam3_preview",
         "page.seedling.tab.slice_infer",
-        "page.seedling.tab.slice_infer",
+        "page.seedling.tab.points",
     )
 
 
@@ -71,6 +73,9 @@ class SeedlingTab(TabInterface):
         self._boundary_file_path: str = ""
         self._preview_thread: Optional[QThread] = None
         self._preview_worker: Optional[SeedlingPreviewWorker] = None
+        self._full_thread: Optional[QThread] = None
+        self._full_worker: Optional[SeedlingInferenceWorker] = None
+        self._last_full_result: Optional[dict] = None
         self.stateTooltip: Optional[StateToolTip] = None
         self._init_controls()
         self._connect_preview_interaction()
@@ -609,7 +614,7 @@ class SeedlingTab(TabInterface):
         self.btn_start_inference = PrimaryPushButton(
             tr("page.seedling.btn.start_inference")
         )
-        self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
+        self.btn_start_inference.clicked.connect(self._on_full_inference_clicked)
         self.btn_start_inference.setEnabled(False)
 
         self.btn_slice_preview = PushButton(tr("page.seedling.btn.slice_preview"))
@@ -629,6 +634,92 @@ class SeedlingTab(TabInterface):
         layout.addWidget(self.btn_slice_preview)
         layout.addWidget(self.btn_start_inference)
         return wrapper
+
+    @Slot()
+    def _on_full_inference_clicked(self) -> None:
+        """Start or stop full-map inference worker."""
+        if self._full_thread is not None:
+            self._stop_full_inference()
+            return
+        self._start_full_inference()
+
+    def _start_full_inference(self) -> None:
+        """Create and start full-map inference worker thread."""
+        if not self._dom_path:
+            return
+        payload = SeedlingInferenceInput(
+            dom_path=self._dom_path,
+            weight_path=str(cfg.sam3WeightPath.value),
+            prompt=self.edit_prompt.text().strip() or "plants",
+            conf=float(self.spin_conf.value()),
+            iou=float(self.spin_iou.value()),
+            slice_size=int(self.spin_slice_size.value()),
+            overlap_ratio=float(self.spin_overlap.value()),
+            cache_dir=self._preview_cache_dir(),
+        )
+        self._full_thread = QThread(self)
+        self._full_worker = SeedlingInferenceWorker(payload)
+        self._full_worker.moveToThread(self._full_thread)
+        self._full_thread.started.connect(self._full_worker.run)
+        self._full_worker.sigProgress.connect(self._on_full_inference_progress)
+        self._full_worker.sigFinished.connect(self._on_full_inference_finished)
+        self._full_worker.sigFailed.connect(self._on_full_inference_failed)
+        self._full_worker.sigCancelled.connect(self._on_full_inference_cancelled)
+        self._full_thread.start()
+        self.btn_start_inference.setText(tr("page.seedling.btn.stop_inference"))
+        self.map_component.status_bar.set_progress(None)
+
+    def _stop_full_inference(self) -> None:
+        """Request cancellation for running full-map inference."""
+        if self._full_worker is None:
+            return
+        self._full_worker.request_cancel()
+
+    def _teardown_full_thread(self) -> None:
+        """Cleanup full-map worker thread and restore UI state."""
+        if self._full_thread is not None:
+            self._full_thread.quit()
+            self._full_thread.wait(1000)
+            self._full_thread.deleteLater()
+        self._full_thread = None
+        self._full_worker = None
+        self.btn_start_inference.setText(tr("page.seedling.btn.start_inference"))
+        self.map_component.status_bar.set_progress(-1)
+
+    @Slot(int)
+    def _on_full_inference_progress(self, percent: int) -> None:
+        """Update status bar progress for full-map inference."""
+        value = max(0, min(100, int(percent)))
+        self.map_component.status_bar.set_progress(value)
+
+    @Slot(dict)
+    def _on_full_inference_finished(self, result_payload: dict) -> None:
+        """Store full-map inference result and cleanup worker."""
+        self._last_full_result = result_payload
+        self._teardown_full_thread()
+
+    @Slot(str)
+    def _on_full_inference_failed(self, message: str) -> None:
+        """Handle full-map inference failure and cleanup worker."""
+        logger.error("Full-map inference failed: {}", message)
+        InfoBar.error(
+            title=tr("error"),
+            content=message.splitlines()[0] if message else tr("error"),
+            parent=self,
+            duration=5000,
+        )
+        self._teardown_full_thread()
+
+    @Slot()
+    def _on_full_inference_cancelled(self) -> None:
+        """Handle full-map inference cancellation signal."""
+        InfoBar.warning(
+            title=tr("warning"),
+            content=tr("page.seedling.msg.preview_cancelled"),
+            parent=self,
+            duration=1800,
+        )
+        self._teardown_full_thread()
 
     @Slot()
     def _on_load_dom(self) -> None:
