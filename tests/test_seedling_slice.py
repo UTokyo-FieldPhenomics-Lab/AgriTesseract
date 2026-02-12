@@ -7,6 +7,8 @@ from src.utils.seedling_detect.slice import (
     bbox_centers_xyxy,
     filter_slice_windows_by_boundary,
     generate_slice_windows,
+    merge_slice_detections,
+    nms_boxes_xyxy,
 )
 
 
@@ -58,3 +60,37 @@ def test_filter_slice_windows_keeps_intersect_and_inside() -> None:
 
     assert len(filtered_intersect) >= len(filtered_inside)
     assert len(filtered_inside) > 0
+
+
+def test_nms_boxes_merges_overlaps_and_keeps_high_score() -> None:
+    """NMS keeps highest-scored box among heavy overlaps."""
+    boxes_xyxy = np.array(
+        [[0.0, 0.0, 10.0, 10.0], [1.0, 1.0, 11.0, 11.0], [30.0, 30.0, 40.0, 40.0]],
+        dtype=float,
+    )
+    scores = np.array([0.7, 0.9, 0.8], dtype=float)
+    keep_indices = nms_boxes_xyxy(boxes_xyxy, scores, iou_threshold=0.5)
+
+    assert keep_indices == [1, 2]
+
+
+def test_merge_slice_detections_applies_nms_and_centers() -> None:
+    """Slice merge returns NMS-filtered boxes and center points."""
+    slices = [
+        {
+            "boxes_geo": np.array(
+                [[0.0, 0.0, 10.0, 10.0], [1.0, 1.0, 11.0, 11.0]],
+                dtype=float,
+            ),
+            "scores": np.array([0.7, 0.9], dtype=float),
+        },
+        {
+            "boxes_geo": np.array([[30.0, 30.0, 40.0, 40.0]], dtype=float),
+            "scores": np.array([0.8], dtype=float),
+        },
+    ]
+    merged = merge_slice_detections(slices, iou_threshold=0.5)
+
+    assert merged["boxes_xyxy"].shape == (2, 4)
+    assert np.allclose(merged["scores"], np.array([0.9, 0.8]))
+    assert merged["points_xy"].shape == (2, 2)

@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 PREVIEW_LAYER_NAME = "Preview Regions"
 PREVIEW_RESULT_LAYER_NAME = "Preview Result"
 SLICE_GRID_LAYER_NAME = "Slice Grid"
+RESULT_BBOX_LAYER_NAME = "result_bbox"
+RESULT_POINTS_LAYER_NAME = "result_points"
 
 
 class SeedlingPreviewController(QObject):
@@ -292,6 +294,52 @@ class SeedlingPreviewController(QObject):
     def clear_slice_grid_layer(self) -> None:
         """Remove slice grid layer."""
         self._canvas.remove_layer(SLICE_GRID_LAYER_NAME)
+
+    def show_inference_result_layers(
+        self,
+        boxes_xyxy: np.ndarray,
+        points_xy: np.ndarray,
+    ) -> None:
+        """Render merged full-inference bbox and center-point layers."""
+        self.clear_inference_result_layers()
+        self._show_result_bbox_layer(boxes_xyxy)
+        self._show_result_points_layer(points_xy)
+
+    def clear_inference_result_layers(self) -> None:
+        """Remove full-inference result layers from canvas."""
+        self._canvas.remove_layer(RESULT_BBOX_LAYER_NAME)
+        self._canvas.remove_layer(RESULT_POINTS_LAYER_NAME)
+
+    def _show_result_bbox_layer(self, boxes_xyxy: np.ndarray) -> None:
+        """Render bbox polygons as result layer."""
+        if boxes_xyxy.size == 0:
+            return
+        group_item = pg.ItemGroup()
+        group_item.setZValue(620)
+        self._canvas.add_overlay_item(group_item)
+        polygons_geo: list[np.ndarray] = []
+        for box in np.asarray(boxes_xyxy, dtype=float):
+            polygon_xy = _box_to_polygon_xy(box)
+            self._add_polygon_to_group(group_item, polygon_xy, 0)
+            polygons_geo.append(polygon_xy)
+        self._register_named_layer(RESULT_BBOX_LAYER_NAME, group_item, polygons_geo)
+
+    def _show_result_points_layer(self, points_xy: np.ndarray) -> None:
+        """Render center points as scatter result layer."""
+        points = np.asarray(points_xy, dtype=float)
+        if points.size == 0:
+            return
+        scatter_item = pg.ScatterPlotItem(
+            x=points[:, 0],
+            y=points[:, 1],
+            symbol="o",
+            size=8,
+            pen=pg.mkPen(color="#FFAA00", width=1.2),
+            brush=pg.mkBrush(255, 120, 0, 180),
+        )
+        scatter_item.setZValue(630)
+        self._canvas.add_overlay_item(scatter_item)
+        self._register_named_layer(RESULT_POINTS_LAYER_NAME, scatter_item, [points])
 
     def set_slice_grid_visibility(self, visible: bool) -> None:
         """Set visibility for slice grid layer."""
@@ -553,6 +601,22 @@ class SeedlingPreviewController(QObject):
         self._canvas._layer_order.append(SLICE_GRID_LAYER_NAME)
         self._canvas.sigLayerAdded.emit(SLICE_GRID_LAYER_NAME, "Vector")
 
+    def _register_named_layer(
+        self,
+        layer_name: str,
+        item: Any,
+        polygons_geo: List[np.ndarray],
+    ) -> None:
+        """Register one custom vector-like layer into canvas registry."""
+        bounds = self._polygon_bounds(polygons_geo)
+        self._canvas._layers[layer_name] = {
+            "item": item,
+            "visible": True,
+            "bounds": bounds,
+        }
+        self._canvas._layer_order.append(layer_name)
+        self._canvas.sigLayerAdded.emit(layer_name, "Vector")
+
     @staticmethod
     def _polygon_bounds(
         polygons_geo: List[np.ndarray],
@@ -618,3 +682,18 @@ class SeedlingPreviewController(QObject):
         except Exception as exc:
             logger.error(f"Failed to read preview patch: {exc}")
             return None
+
+
+def _box_to_polygon_xy(box_xyxy: np.ndarray) -> np.ndarray:
+    """Convert one xyxy box to a closed 5-point polygon."""
+    x_min, y_min, x_max, y_max = [float(v) for v in box_xyxy]
+    return np.array(
+        [
+            [x_min, y_min],
+            [x_max, y_min],
+            [x_max, y_max],
+            [x_min, y_max],
+            [x_min, y_min],
+        ],
+        dtype=float,
+    )

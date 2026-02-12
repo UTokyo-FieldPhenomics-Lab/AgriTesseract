@@ -111,10 +111,10 @@ def bbox_centers_xyxy(boxes_xyxy: np.ndarray) -> np.ndarray:
 
 def _window_to_geo_polygon(window: SliceWindow, transform: Affine) -> Polygon:
     """Convert one pixel window to geo polygon."""
-    x_tl, y_tl = transform * (window.x0, window.y0)
-    x_tr, y_tr = transform * (window.x1, window.y0)
-    x_br, y_br = transform * (window.x1, window.y1)
-    x_bl, y_bl = transform * (window.x0, window.y1)
+    x_tl, y_tl = _affine_xy(transform, float(window.x0), float(window.y0))
+    x_tr, y_tr = _affine_xy(transform, float(window.x1), float(window.y0))
+    x_br, y_br = _affine_xy(transform, float(window.x1), float(window.y1))
+    x_bl, y_bl = _affine_xy(transform, float(window.x0), float(window.y1))
     return Polygon(
         [
             (float(x_tl), float(y_tl)),
@@ -160,3 +160,112 @@ def filter_slice_windows_by_boundary(
         if not keep_inside and window_poly.intersects(boundary_poly):
             kept_windows.append(window)
     return kept_windows
+
+
+def _affine_xy(
+    transform: Affine, x_value: float, y_value: float
+) -> tuple[float, float]:
+    """Apply affine transform and return x/y as floats."""
+    point_xy = transform * (x_value, y_value)
+    return float(point_xy[0]), float(point_xy[1])
+
+
+def nms_boxes_xyxy(
+    boxes_xyxy: np.ndarray,
+    scores: np.ndarray,
+    iou_threshold: float,
+) -> list[int]:
+    """Run greedy NMS and return kept indices.
+
+    Parameters
+    ----------
+    boxes_xyxy : numpy.ndarray
+        Array with shape ``(N, 4)`` in ``[x0, y0, x1, y1]``.
+    scores : numpy.ndarray
+        Score array with shape ``(N,)``.
+    iou_threshold : float
+        IoU threshold for suppression.
+
+    Returns
+    -------
+    list[int]
+        Kept original indices sorted by descending score.
+    """
+    if boxes_xyxy.size == 0:
+        return []
+    order = np.argsort(-np.asarray(scores, dtype=float))
+    keep: list[int] = []
+    while order.size > 0:
+        best_idx = int(order[0])
+        keep.append(best_idx)
+        if order.size == 1:
+            return keep
+        remain = order[1:]
+        iou_values = _pairwise_iou_xyxy(boxes_xyxy[best_idx], boxes_xyxy[remain])
+        order = remain[iou_values <= float(iou_threshold)]
+    return keep
+
+
+def _pairwise_iou_xyxy(base_box: np.ndarray, candidate_boxes: np.ndarray) -> np.ndarray:
+    """Compute IoU between one box and many boxes."""
+    xx0 = np.maximum(base_box[0], candidate_boxes[:, 0])
+    yy0 = np.maximum(base_box[1], candidate_boxes[:, 1])
+    xx1 = np.minimum(base_box[2], candidate_boxes[:, 2])
+    yy1 = np.minimum(base_box[3], candidate_boxes[:, 3])
+    inter_w = np.maximum(0.0, xx1 - xx0)
+    inter_h = np.maximum(0.0, yy1 - yy0)
+    inter_area = inter_w * inter_h
+    base_area = max(0.0, (base_box[2] - base_box[0]) * (base_box[3] - base_box[1]))
+    cand_area = np.maximum(
+        0.0,
+        (candidate_boxes[:, 2] - candidate_boxes[:, 0])
+        * (candidate_boxes[:, 3] - candidate_boxes[:, 1]),
+    )
+    union_area = np.maximum(1e-9, base_area + cand_area - inter_area)
+    return inter_area / union_area
+
+
+def merge_slice_detections(
+    slice_result_list: list[dict],
+    iou_threshold: float,
+) -> dict[str, np.ndarray]:
+    """Merge per-slice detection boxes with global NMS.
+
+    Parameters
+    ----------
+    slice_result_list : list[dict]
+        List of per-slice result dicts containing ``boxes_geo`` and ``scores``.
+    iou_threshold : float
+        IoU threshold for NMS.
+
+    Returns
+    -------
+    dict[str, numpy.ndarray]
+        Keys: ``boxes_xyxy``, ``scores``, ``points_xy``.
+    """
+    box_chunks: list[np.ndarray] = []
+    score_chunks: list[np.ndarray] = []
+    for result in slice_result_list:
+        boxes = np.asarray(result.get("boxes_geo", np.zeros((0, 4))), dtype=float)
+        scores = np.asarray(result.get("scores", np.zeros((0,))), dtype=float)
+        if boxes.size == 0 or scores.size == 0:
+            continue
+        box_chunks.append(boxes)
+        score_chunks.append(scores)
+    if not box_chunks:
+        empty_boxes = np.zeros((0, 4), dtype=float)
+        return {
+            "boxes_xyxy": empty_boxes,
+            "scores": np.zeros((0,), dtype=float),
+            "points_xy": np.zeros((0, 2), dtype=float),
+        }
+    all_boxes = np.concatenate(box_chunks, axis=0)
+    all_scores = np.concatenate(score_chunks, axis=0)
+    keep_indices = nms_boxes_xyxy(all_boxes, all_scores, iou_threshold=iou_threshold)
+    merged_boxes = all_boxes[keep_indices]
+    merged_scores = all_scores[keep_indices]
+    return {
+        "boxes_xyxy": merged_boxes,
+        "scores": merged_scores,
+        "points_xy": bbox_centers_xyxy(merged_boxes),
+    }

@@ -41,6 +41,7 @@ from src.utils.seedling_detect.qthread import (
     SeedlingPreviewWorker,
 )
 from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
+from src.utils.seedling_detect.slice import merge_slice_detections
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:
@@ -696,6 +697,21 @@ class SeedlingTab(TabInterface):
     def _on_full_inference_finished(self, result_payload: dict) -> None:
         """Store full-map inference result and cleanup worker."""
         self._last_full_result = result_payload
+        merged_result = merge_slice_detections(
+            slice_result_list=result_payload.get("slices", []),
+            iou_threshold=float(self.spin_iou.value()),
+        )
+        self._last_full_result["merged"] = merged_result
+        self._preview_ctrl.show_inference_result_layers(
+            boxes_xyxy=merged_result["boxes_xyxy"],
+            points_xy=merged_result["points_xy"],
+        )
+        InfoBar.success(
+            title=tr("success"),
+            content=f"Full inference done: {len(merged_result['boxes_xyxy'])} objects",
+            parent=self,
+            duration=2500,
+        )
         self._teardown_full_thread()
 
     @Slot(str)
