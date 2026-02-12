@@ -251,6 +251,11 @@ class MapCanvas(QWidget):
         self.setFocusProxy(self._plot_widget)
         self._plot_widget.installEventFilter(self)
         self._plot_widget.viewport().installEventFilter(self)
+        
+        # Enable custom context menu
+        self._plot_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._plot_widget.customContextMenuRequested.connect(self._show_context_menu)
+        
         # Background set in _update_theme
         self._plot_widget.setAspectLocked(True)
 
@@ -281,6 +286,85 @@ class MapCanvas(QWidget):
         # Create primary image item for raster display
         self._image_item = pg.ImageItem()
         self._item_group.addItem(self._image_item)
+
+    def _show_context_menu(self, pos: QPointF):
+        """Show custom context menu."""
+        menu = QMenu(self)
+        
+        # Focus Action (Zoom to Boundary & Align)
+        action_focus = QAction(tr("Focus"), self)
+        # Using a dummy tr key or simple text if tr not ready
+        action_focus.setText("Focus") 
+        action_focus.triggered.connect(self._focus_content)
+        menu.addAction(action_focus)
+        
+        # Rotate Action (Set Rotation)
+        action_rotate = QAction("Rotate...", self)
+        action_rotate.triggered.connect(self._request_rotation)
+        menu.addAction(action_rotate)
+        
+        menu.addSeparator()
+        
+        # Add "Zoom to Layer" options if layers exist
+        if self._layers:
+            zoom_menu = menu.addMenu("Zoom to Layer")
+            for name in self._layer_order:
+                action = QAction(name, self)
+                action.triggered.connect(lambda checked, n=name: self.zoom_to_layer(n))
+                zoom_menu.addAction(action)
+
+        menu.exec_(self._plot_widget.mapToGlobal(pos))
+
+    def _focus_content(self):
+        """Zoom to fit all content and reset rotation."""
+        self.set_rotation(0)
+        # Calculate bounds of all layers
+        if not self._layers:
+            return
+            
+        # Prioritize Boundary
+        if "Boundary" in self._layers:
+            self.zoom_to_layer("Boundary")
+        else:
+            # Zoom to first visible
+            for name, layer in self._layers.items():
+                if layer["visible"]:
+                    self.zoom_to_layer(name)
+                    break
+
+    def _request_rotation(self):
+        """Request rotation via dialog (placeholder) or toggle auto-rotation."""
+        # For now, just reset to 0 or 90
+        # In real app, this should open a dialog or be handled by the controller
+        # Emitting a signal for controller to handle is better, but here we keep it simple.
+        # Let's iterate 90 degrees for basic interaction
+        new_angle = (self._rotation_angle + 90) % 360
+        self.set_rotation(new_angle)
+
+    def zoom_to_layer(self, layer_name: str) -> None:
+        """
+        Zoom to the extent of a specific layer.
+
+        Parameters
+        ----------
+        layer_name : str
+            Name of the layer.
+        """
+        if layer_name not in self._layers:
+            return
+
+        layer_info = self._layers[layer_name]
+        if "bounds" in layer_info:
+            b = layer_info["bounds"]
+            width = b.right - b.left
+            height = b.top - b.bottom
+            rect = QRectF(b.left, b.bottom, width, height)
+            
+            # Apply current rotation to view
+            # Standard setRange works on unrotated coords typically in pyqtgraph
+            
+            self._view_box.setRange(rect, padding=0.05)
+            logger.debug(f"Zoomed to layer: {layer_name}")
 
 
     def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:

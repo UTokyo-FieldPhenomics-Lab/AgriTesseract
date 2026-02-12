@@ -133,7 +133,8 @@ class TabInterface(BaseInterface):
 
         # 2. Property Panel (Right)
         self.property_panel = PropertyPanel()
-        self.splitter.addWidget(self.property_panel)
+        # self.splitter.addWidget(self.property_panel)
+        self.property_panel.hide()  # Hide globally as per requirement
 
         self.splitter.setSizes([800, 200])
 

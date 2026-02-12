@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 from PySide6.QtCore import Signal, Qt
-from qfluentwidgets import DoubleSpinBox, BodyLabel
+from qfluentwidgets import DoubleSpinBox, BodyLabel, InfoBadge, ProgressBar, IndeterminateProgressBar
 
 from src.gui.config import tr
 
@@ -86,9 +86,13 @@ class StatusBar(QFrame):
         rot_layout.addWidget(self.rotation_label)
         rot_layout.addWidget(self.rotation_sb, 1) # Expand to fill
         
-        layout.addWidget(self.rotation_container, 1) # Ratio 1
+        layout.addWidget(self.rotation_container, 0) # Fixed size
         
-        # ready status is removed as requested.
+        # Spacer to push status to right
+        layout.addStretch(1)
+        
+        # --- Section 4: Status Indicators ---
+        self._init_status_indicators(layout)
 
     def _create_separator(self) -> QFrame:
         line = QFrame()
@@ -129,3 +133,120 @@ class StatusBar(QFrame):
             self.rotation_sb.blockSignals(True)
             self.rotation_sb.setValue(angle)
             self.rotation_sb.blockSignals(False)
+
+    def _init_status_indicators(self, layout: QHBoxLayout):
+        """Initialize status indicator section."""
+        # Separator 3
+        layout.addWidget(self._create_separator())
+
+        self.status_container = QWidget()
+        status_layout = QHBoxLayout(self.status_container)
+        status_layout.setContentsMargins(16, 0, 16, 0)
+        status_layout.setSpacing(10)
+
+        # 1. Message Label / Badge Container
+        self.message_container = QWidget()
+        self.message_layout = QHBoxLayout(self.message_container)
+        self.message_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.addWidget(self.message_container)
+
+        # 2. Progress Bar
+        self.progress_bar = ProgressBar()
+        self.progress_bar.setFixedWidth(150)
+        self.progress_bar.hide()
+        status_layout.addWidget(self.progress_bar)
+
+        # 3. Indeterminate Progress Bar
+        self.busy_bar = IndeterminateProgressBar()
+        self.busy_bar.setFixedWidth(150)
+        self.busy_bar.hide()
+        status_layout.addWidget(self.busy_bar)
+
+        layout.addWidget(self.status_container)
+        layout.addStretch(1) # Stretch to keep status on left/center-left or let it push? 
+        # Actually user requirement: "at the last side" (right side).
+        # So we should add stretch before this container if we want it on the right.
+        
+    def _rebuild_layout_for_status(self):
+        """Rebuild layout to place coordinates left, zoom/rot center, status right."""
+        # Current layout in _init_ui is adding items sequentially.
+        # We need to insert stretch before status container.
+        # Let's modify _init_ui instead of appending here.
+        pass
+
+    def set_status(self, mode: str, message: str) -> None:
+        """
+        Set status message and badge.
+        
+        Parameters
+        ----------
+        mode : str
+             'success', 'warning', 'error', 'info', 'custom'
+        message : str
+             Status message text
+        """
+        # Clear previous
+        self.clear_message()
+        
+        badge = None
+        if mode == 'success':
+            badge = InfoBadge.success(message)
+        elif mode == 'warning':
+            badge = InfoBadge.warning(message)
+        elif mode == 'error':
+            badge = InfoBadge.error(message)
+        elif mode == 'info':
+            badge = InfoBadge.info(message)
+        elif mode == 'custom':
+            badge = InfoBadge.custom(message, '#005fb8', '#60cdff')
+        else:
+            badge = BodyLabel(message)
+            
+        if badge:
+            self.message_layout.addWidget(badge)
+            
+    def set_progress(self, value: int = None) -> None:
+        """
+        Set progress bar state.
+        
+        Parameters
+        ----------
+        value : int, optional
+            0-100 for determinate progress. 
+            None for indeterminate (busy) state.
+            -1 to hide progress bars.
+        """
+        if value is None:
+            self.progress_bar.hide()
+            self.busy_bar.show()
+            if not self.busy_bar.isStarted():
+                self.busy_bar.start()
+        elif 0 <= value <= 100:
+            self.busy_bar.hide()
+            if self.busy_bar.isStarted():
+                self.busy_bar.stop()
+            self.progress_bar.setValue(value)
+            self.progress_bar.show()
+        else:
+            self.clear_progress()
+
+    def clear_message(self):
+        """Clear status message."""
+        while self.message_layout.count():
+            item = self.message_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+    def clear_progress(self):
+        """Hide all progress bars."""
+        self.progress_bar.hide()
+        self.busy_bar.hide()
+        if self.busy_bar.isStarted():
+            self.busy_bar.stop()
+
+    def clear_status(self):
+        """Clear all status content."""
+        self.clear_message()
+        self.clear_progress()
+
