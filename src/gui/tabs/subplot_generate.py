@@ -24,6 +24,33 @@ from src.utils.subplot_generate.io import (
 )
 
 
+class AdaptiveStackedWidget(QStackedWidget):
+    """QStackedWidget that adjusts its size to the current page."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+
+    def sizeHint(self):
+        current = self.currentWidget()
+        if current:
+            return current.sizeHint()
+        return super().sizeHint()
+
+    def minimumSizeHint(self):
+        current = self.currentWidget()
+        if current:
+            return current.minimumSizeHint()
+        return super().minimumSizeHint()
+
+    def setCurrentIndex(self, index):
+        super().setCurrentIndex(index)
+        self.updateGeometry()
+
+    def setCurrentWidget(self, widget):
+        super().setCurrentWidget(widget)
+        self.updateGeometry()
+
 class SubplotTab(TabInterface):
     """UI workflow for subplot generation using EasyIDP."""
 
@@ -82,13 +109,11 @@ class SubplotTab(TabInterface):
         self.tab_file = self._build_file_tab()
         self.tab_layout = self._build_layout_tab()
         self.tab_numbering = self._build_numbering_tab()
-        self.tab_output = self._build_output_tab()
         
         tabs = [
             ("subplotFileTab", self.tab_file, "File"),
             ("subplotLayoutTab", self.tab_layout, "Layout"),
-            ("subplotNumberingTab", self.tab_numbering, "Numbering"),
-            ("subplotOutputTab", self.tab_output, "Output"),
+            ("subplotNumberingTab", self.tab_numbering, "Numbering")
         ]
         
         for route_key, widget, text in tabs:
@@ -145,13 +170,25 @@ class SubplotTab(TabInterface):
         
         self.btn_load_image = PushButton(tr("page.subplot.btn.load_image"))
         self.btn_load_image.clicked.connect(self._on_load_image)
-        
+
         self.btn_load_boundary = PushButton(tr("page.subplot.btn.load_boundary"))
         self.btn_load_boundary.clicked.connect(self._on_load_boundary)
+
+        self.btn_focus = PushButton(tr("page.subplot.btn.focus"))
+        self.btn_focus.clicked.connect(self._on_focus)
+
+        self.btn_generate = PrimaryPushButton(tr("page.subplot.btn.save"))
+        self.btn_generate.clicked.connect(self._on_generate)
+        self.btn_generate.setEnabled(False)
         
         bar.addWidget(self.btn_load_image)
+        bar.addSeparator()
         bar.addWidget(self.btn_load_boundary)
-        bar.addWidget(self._bar_spacer())
+        bar.addWidget(self.btn_focus)
+        # bar.addWidget(self._bar_spacer())
+        bar.addSeparator()
+        bar.addWidget(self.btn_generate)
+
         layout.addWidget(bar)
         return tab
 
@@ -164,6 +201,7 @@ class SubplotTab(TabInterface):
         # Def Mode
         self.combo_def_mode = ComboBox()
         self.combo_def_mode.addItems([tr("page.subplot.combo.rc"), tr("page.subplot.combo.size")])
+        self.combo_def_mode.setFixedWidth(140)
         self.combo_def_mode.currentIndexChanged.connect(self._on_def_mode_changed)
         self.combo_def_mode.currentIndexChanged.connect(self._auto_preview)
         
@@ -171,25 +209,29 @@ class SubplotTab(TabInterface):
         self.spin_rows = SpinBox()
         self.spin_rows.setRange(1, 100)
         self.spin_rows.setValue(5)
+        self.spin_rows.setFixedWidth(160)
         self.spin_rows.valueChanged.connect(self._auto_preview)
         
         self.spin_cols = SpinBox()
         self.spin_cols.setRange(1, 100)
         self.spin_cols.setValue(5)
+        self.spin_cols.setFixedWidth(160)
         self.spin_cols.valueChanged.connect(self._auto_preview)
         
         # Width/Height
         self.spin_width = DoubleSpinBox()
         self.spin_width.setRange(0.1, 1000.0)
         self.spin_width.setValue(2.0)
-        self.spin_width.setSuffix(" m")
+        # self.spin_width.setSuffix(" m")
+        # self.spin_width.setFixedWidth(160)
         self.spin_width.valueChanged.connect(self._auto_preview)
         self.spin_width.hide() # Initial hidden
         
         self.spin_height = DoubleSpinBox()
         self.spin_height.setRange(0.1, 1000.0)
         self.spin_height.setValue(2.0)
-        self.spin_height.setSuffix(" m")
+        # self.spin_height.setSuffix(" m")
+        # self.spin_height.setFixedWidth(160)
         self.spin_height.valueChanged.connect(self._auto_preview)
         self.spin_height.hide() # Initial hidden
         
@@ -198,12 +240,14 @@ class SubplotTab(TabInterface):
         self.spin_x_spacing.setRange(-10, 100)
         self.spin_x_spacing.setValue(0.0)
         self.spin_x_spacing.setSuffix(" m")
+        self.spin_x_spacing.setFixedWidth(140)
         self.spin_x_spacing.valueChanged.connect(self._auto_preview)
         
         self.spin_y_spacing = DoubleSpinBox()
         self.spin_y_spacing.setRange(-10, 100)
         self.spin_y_spacing.setValue(0.0)
         self.spin_y_spacing.setSuffix(" m")
+        self.spin_y_spacing.setFixedWidth(140)
         self.spin_y_spacing.valueChanged.connect(self._auto_preview)
         
         # Keep Mode
@@ -235,11 +279,9 @@ class SubplotTab(TabInterface):
         layout_size.addWidget(self._build_labeled_widget(tr("page.subplot.label.height_m"), self.spin_height))
 
         # Stacked Widget for Mode Switching
-        self.stack_layout_mode = QStackedWidget()
+        self.stack_layout_mode = AdaptiveStackedWidget()
         self.stack_layout_mode.addWidget(self.container_rc)
         self.stack_layout_mode.addWidget(self.container_size)
-        # Fix size policy to ensure it doesn't collapse or expand weirdly
-        self.stack_layout_mode.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
         bar.addWidget(self._build_labeled_widget(tr("page.subplot.label.def_mode"), self.combo_def_mode))
         bar.addWidget(self.stack_layout_mode)
@@ -294,20 +336,6 @@ class SubplotTab(TabInterface):
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
         return tab
-
-    def _build_output_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(0, 0, 0, 0)
-        bar = self._new_command_bar()
-        
-        self.btn_generate = PrimaryPushButton(tr("page.subplot.btn.save"))
-        self.btn_generate.clicked.connect(self._on_generate)
-        
-        bar.addWidget(self.btn_generate)
-        bar.addWidget(self._bar_spacer())
-        layout.addWidget(bar)
-        return tab
         
     def _on_def_mode_changed(self, index: int):
         self.stack_layout_mode.setCurrentIndex(index)
@@ -353,6 +381,7 @@ class SubplotTab(TabInterface):
             color="#00FF00",
             width=1,
         )
+        self.btn_generate.setEnabled(True)
 
     @Slot(float)
     def _on_canvas_rotation_changed(self, angle: float) -> None:
@@ -372,12 +401,25 @@ class SubplotTab(TabInterface):
             return
 
         if self.map_component.map_canvas.add_raster_layer(file_path):
-            self.map_component.status_bar.set_status('success', f"Loaded: {Path(file_path).name}")
+            logger.info("Image loaded successfully.")
+            InfoBar.success(
+                    title=tr("success"),
+                    content=f"Loaded: {Path(file_path).name}",
+                    parent=self,
+                    duration=3000
+            )
+            # self.map_component.status_bar.set_status('success', f"DOM loaded: {Path(file_path).name}")
             if self.boundary_roi is None:
                 self.map_component.map_canvas.zoom_to_layer(Path(file_path).stem)
             return
 
-        self.map_component.status_bar.set_status('error', f"Failed to load image: {file_path}")
+
+        logger.error(f"Failed to load image: {file_path}")
+        InfoBar.error(
+            title=tr("error"),
+            content=f"Failed to load image: {file_path}",
+            parent=self
+        )
 
     @Slot()
     def _on_load_boundary(self) -> None:
@@ -400,10 +442,22 @@ class SubplotTab(TabInterface):
                 width=2,
             )
             self._auto_preview()
-            self.map_component.status_bar.set_status('success', tr("page.subplot.msg.boundary_loaded"))
+            logger.info("Boundary loaded successfully.")
+            InfoBar.success(
+                    title=tr("success"),
+                    content=tr("page.subplot.msg.boundary_loaded"),
+                    parent=self,
+                    duration=3000
+            )
+            # self.map_component.status_bar.set_status('success', tr("page.subplot.msg.boundary_loaded"))
         except Exception as exc:  # pragma: no cover - UI feedback branch
             logger.exception("Failed to load boundary")
-            self.map_component.status_bar.set_status('error', f"{tr('page.subplot.error.invalid_boundary')} ({exc})")
+            InfoBar.error(
+                    title=tr("error"),
+                    content=tr("page.subplot.error.invalid_boundary"),
+                    parent=self
+                )
+            # self.map_component.status_bar.set_status('error', f"IO error")
 
     @Slot()
     def _auto_preview(self) -> None:
@@ -414,23 +468,33 @@ class SubplotTab(TabInterface):
         try:
             self._show_preview()
         except Exception as exc:  # pragma: no cover - UI feedback branch
+            self.btn_generate.setEnabled(False)
             logger.debug(f"Preview error: {exc}")
 
     @Slot()
     def _on_focus(self) -> None:
-        """Zoom to boundary and apply MAR-based auto-rotation."""
-        # This slot is now likely triggered via context menu (canvas level) 
-        # but kept here if we want to call it programmatically or if migrated fully to canvas.
-        # Actually logic moved to Context Menu in MapCanvas, so this might be redundant 
-        # unless we expose a public method for it.
-        # Keeping for now if previous signal connections exist, but button was removed.
-        pass
+        """Focus on the boundary layer."""
+        if self.boundary_roi is not None:
+            # Focus logic here (usually handled by map_component)
+            self.map_component.map_canvas.zoom_to_layer("Boundary")
+
+            # Auto-rotate
+            angle = calculate_optimal_rotation(self.boundary_roi)
+            if angle is not None:
+                self.map_component.map_canvas.set_rotation(angle)
+            else:
+                self.map_component.map_canvas.set_rotation(0)
 
     @Slot()
     def _on_generate(self) -> None:
         """Generate subplots and save as shapefile."""
         if self.boundary_roi is None:
-            self.map_component.status_bar.set_status('warning', tr("page.subplot.warning.no_boundary"))
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.subplot.msg.no_boundary"),
+                parent=self
+            )
+            # self.map_component.status_bar.set_status('warning', tr("page.subplot.warning.no_boundary"))
             return
 
         file_path, _ = QFileDialog.getSaveFileName(
@@ -443,17 +507,27 @@ class SubplotTab(TabInterface):
             return
 
         self.map_component.status_bar.set_progress(None) # Busy
-        self.map_component.status_bar.set_status('info', "Generating...")
+        # self.map_component.status_bar.set_status('info', "Generating...")
         
         try:
             params = self._collect_params()
             generate_and_save(self.boundary_roi, output_path=file_path, **params)
-            self.map_component.status_bar.set_status('success', tr("page.subplot.msg.success"))
+            InfoBar.success(
+                title=tr("success"),
+                content=tr("page.subplot.msg.success"),
+                parent=self
+            )
+            self.map_component.status_bar.set_status('success', tr("success"))
         except Exception as exc:  # pragma: no cover - UI feedback branch
             logger.exception("Subplot save failed")
-            self.map_component.status_bar.set_status('error', f"Generation failed: {exc}")
-        finally:
-            self.map_component.status_bar.set_progress(100)
+            InfoBar.error(
+                title=tr("error"),
+                content=f"Generation failed: {exc}",
+                parent=self
+            )
+            # self.map_component.status_bar.set_status('error', f"Generation failed: {exc}")
+        # finally:
+        #     self.map_component.status_bar.set_progress(100)
             # Or hide after delay?
             # self.map_component.status_bar.set_progress(-1) 
 
