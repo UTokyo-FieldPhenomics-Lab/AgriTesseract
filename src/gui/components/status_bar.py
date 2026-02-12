@@ -89,7 +89,7 @@ class StatusBar(QFrame):
         layout.addWidget(self.rotation_container, 0) # Fixed size
         
         # Spacer to push status to right
-        layout.addStretch(1)
+        # layout.addStretch(1)
         
         # --- Section 4: Status Indicators ---
         self._init_status_indicators(layout)
@@ -152,13 +152,13 @@ class StatusBar(QFrame):
 
         # 2. Progress Bar
         self.progress_bar = ProgressBar()
-        self.progress_bar.setFixedWidth(150)
+        self.progress_bar.setFixedWidth(50)
         self.progress_bar.hide()
         status_layout.addWidget(self.progress_bar)
 
         # 3. Indeterminate Progress Bar
         self.busy_bar = IndeterminateProgressBar()
-        self.busy_bar.setFixedWidth(150)
+        self.busy_bar.setFixedWidth(50)
         self.busy_bar.hide()
         status_layout.addWidget(self.busy_bar)
 

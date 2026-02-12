@@ -27,6 +27,7 @@ from qfluentwidgets import (
     PrimaryPushButton,
     PushButton,
     SpinBox,
+    StateToolTip,
     qrouter,
 )
 
@@ -67,6 +68,7 @@ class SeedlingTab(TabInterface):
         self._dom_path: str = ""
         self._preview_thread: Optional[QThread] = None
         self._preview_worker: Optional[SeedlingPreviewWorker] = None
+        self.stateTooltip: Optional[StateToolTip] = None
         self._init_controls()
         self._connect_preview_interaction()
         self._update_button_states()
@@ -284,8 +286,6 @@ class SeedlingTab(TabInterface):
         layout.addWidget(bar)
         return tab
 
-
-
     def _build_model_section(self) -> QWidget:
         """Build model parameter section widget."""
         self.edit_prompt = LineEdit()
@@ -457,14 +457,29 @@ class SeedlingTab(TabInterface):
         """Update preview-run button text and status bar notification."""
         if running:
             self.btn_preview_detect.setText(tr("page.seedling.btn.stop_inference"))
-            InfoBar.info(
-                title=tr("info"),
-                content=tr("page.seedling.msg.preview_running"),
-                parent=self,
-                duration=2000,
+            if self.stateTooltip:
+                self.stateTooltip.setState(True)
+                self.stateTooltip = None
+            
+            self.stateTooltip = StateToolTip(
+                tr("info"),
+                tr("page.seedling.msg.preview_running"),
+                self.window(),
             )
+            # Position the tooltip nicely
+            self.stateTooltip.move(self.stateTooltip.getSuitablePos())
+            self.stateTooltip.show()
+            self.map_component.status_bar.set_progress(None)
             return
+
+        if self.stateTooltip:
+            # If not None here, it means it wasn't handled by finished (so failed or cancelled)
+            self.stateTooltip.close()
+            self.stateTooltip = None
+
         self.btn_preview_detect.setText(tr("page.seedling.btn.preview_detect"))
+        self.map_component.status_bar.set_progress(-1)
+        # self.map_component.status_bar.set_status("success", "Inf finished")
 
     @Slot(list, list)
     def _on_preview_inference_finished(
@@ -474,12 +489,18 @@ class SeedlingTab(TabInterface):
     ) -> None:
         """Render preview inference result polygons."""
         self._preview_ctrl.show_preview_result_polygons(polygons_geo)
-        InfoBar.success(
-            title=tr("success"),
-            content=tr("page.seedling.msg.preview_finished"),
-            parent=self,
-            duration=2000,
-        )
+
+        if self.stateTooltip:
+            self.stateTooltip.setContent(tr("page.seedling.msg.preview_finished") + " 😆")
+            self.stateTooltip.setState(True)
+            self.stateTooltip = None
+
+        # InfoBar.success(
+        #     title=tr("success"),
+        #     content=tr("page.seedling.msg.preview_finished"),
+        #     parent=self,
+        #     duration=2000,
+        # )
         self._teardown_preview_thread()
 
     @Slot(str)
@@ -493,6 +514,10 @@ class SeedlingTab(TabInterface):
             parent=self,
             duration=12000,
         )
+        if self.stateTooltip:
+            # If not None here, it means it wasn't handled by finished (so failed or cancelled)
+            self.stateTooltip.close()
+            self.stateTooltip = None
         self._teardown_preview_thread()
 
     @Slot()
@@ -521,6 +546,7 @@ class SeedlingTab(TabInterface):
         
         self.btn_start_inference = PrimaryPushButton(tr("page.seedling.btn.start_inference"))
         self.btn_start_inference.clicked.connect(self.sigFullInference.emit)
+        self.btn_start_inference.setEnabled(False)
         
         self.btn_slice_preview = PushButton(tr("page.seedling.btn.slice_preview"))
         self.btn_slice_preview.setCheckable(True)
@@ -539,7 +565,6 @@ class SeedlingTab(TabInterface):
         layout.addWidget(self.btn_slice_preview)
         layout.addWidget(self.btn_start_inference)
         return wrapper
-
 
 
     @Slot()
