@@ -25,6 +25,10 @@ from src.utils.seedling_detect.preview import (
     preview_bounds_from_center,
 )
 from src.utils.seedling_detect.sam3 import run_preview_inference
+from src.utils.seedling_detect.qthread import (
+    SeedlingInferenceInput,
+    SeedlingInferenceWorker,
+)
 from src.utils.seedling_detect.slice import (
     SliceWindow,
     bbox_centers_xyxy,
@@ -45,6 +49,8 @@ __all__ = [
     "polygon_px_to_geo",
     "preview_bounds_from_center",
     "run_preview_inference",
+    "SeedlingInferenceInput",
+    "SeedlingInferenceWorker",
     "save_bbox_shp",
     "save_mask_polygon_shp",
     "save_point_shp",

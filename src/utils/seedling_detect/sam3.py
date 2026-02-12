@@ -31,7 +31,7 @@ def _extract_scores(result_obj: Any, polygon_count: int) -> np.ndarray:
     if hasattr(conf_data, "detach"):
         return conf_data.detach().cpu().numpy().astype(float)
     return np.asarray(conf_data, dtype=float)
-    
+
 
 def run_preview_inference(
     image_rgb: np.ndarray,
@@ -73,7 +73,7 @@ def run_preview_inference(
         results = [results]
     if not results:
         return {"polygons_px": [], "scores": np.zeros((0,), dtype=float)}
-    
+
     result_obj = results[0]
     logger.info(result_obj)
 
@@ -102,6 +102,71 @@ def run_preview_inference(
     }
 
 
+def run_slice_inference(
+    image_rgb: np.ndarray,
+    weight_path: str,
+    prompt: str,
+    conf: float,
+    iou: float,
+    cache_dir: str | None = None,
+    _predictor_override: Any | None = None,
+) -> dict[str, Any]:
+    """Run one slice inference and return polygons, boxes, and scores.
+
+    Parameters
+    ----------
+    image_rgb : numpy.ndarray
+        Slice image with shape ``(H, W, C)``.
+    weight_path : str
+        SAM3 model path.
+    prompt : str
+        Text prompt.
+    conf : float
+        Confidence threshold.
+    iou : float
+        IoU threshold.
+    cache_dir : str | None, optional
+        Optional cache directory for predictor outputs.
+    _predictor_override : Any | None, optional
+        Test-only predictor class override.
+    """
+    preview_data = run_preview_inference(
+        image_rgb=image_rgb,
+        weight_path=weight_path,
+        prompt=prompt,
+        conf=conf,
+        iou=iou,
+        cache_dir=cache_dir,
+        _predictor_override=_predictor_override,
+    )
+    polygons_px = preview_data["polygons_px"]
+    boxes_xyxy = polygons_to_boxes_xyxy(polygons_px)
+    return {
+        "polygons_px": polygons_px,
+        "boxes_xyxy": boxes_xyxy,
+        "scores": np.asarray(preview_data["scores"], dtype=float),
+    }
+
+
+def polygons_to_boxes_xyxy(polygons_px: list[np.ndarray]) -> np.ndarray:
+    """Compute xyxy boxes from polygon list."""
+    if not polygons_px:
+        return np.zeros((0, 4), dtype=float)
+    box_list: list[list[float]] = []
+    for polygon_xy in polygons_px:
+        poly_xy = np.asarray(polygon_xy, dtype=float)
+        if poly_xy.ndim != 2 or poly_xy.shape[0] < 3:
+            continue
+        x_min = float(np.min(poly_xy[:, 0]))
+        y_min = float(np.min(poly_xy[:, 1]))
+        x_max = float(np.max(poly_xy[:, 0]))
+        y_max = float(np.max(poly_xy[:, 1]))
+        box_list.append([x_min, y_min, x_max, y_max])
+    if not box_list:
+        return np.zeros((0, 4), dtype=float)
+    return np.asarray(box_list, dtype=float)
+
+
 def _prepare_preview_image(image_rgb: np.ndarray) -> np.ndarray:
     """Normalize preview image for Ultralytics predictor input."""
     image_data = np.asarray(image_rgb)
@@ -118,6 +183,7 @@ def _prepare_preview_image(image_rgb: np.ndarray) -> np.ndarray:
         image_data = image_data[:, :, :3]
     return np.ascontiguousarray(image_data)
 
+
 def _load_predictor_class() -> Any:
     """Load SAM3 semantic predictor class from ultralytics."""
     try:
@@ -127,6 +193,7 @@ def _load_predictor_class() -> Any:
             "SAM3SemanticPredictor is required for SAM3 preview inference"
         ) from exc
     return SAM3SemanticPredictor
+
 
 def _build_semantic_predictor(
     weight_path: str,

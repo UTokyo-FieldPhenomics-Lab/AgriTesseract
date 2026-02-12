@@ -8,6 +8,7 @@ from src.utils.seedling_detect.sam3 import (
     _extract_polygons_from_mask_xy,
     _extract_scores,
     run_preview_inference,
+    run_slice_inference,
 )
 
 
@@ -117,3 +118,34 @@ def test_run_preview_inference_converts_image_to_contiguous() -> None:
         _predictor_override=_DummyPredictor,
     )
     assert len(output["polygons_px"]) == 1
+
+
+def test_run_slice_inference_returns_boxes_and_scores() -> None:
+    """Slice inference should return derived xyxy boxes."""
+
+    class _DummyPredictor:
+        def __init__(self, overrides):
+            self.overrides = overrides
+
+        def set_image(self, image_rgb):
+            self.image = image_rgb
+
+        def __call__(self, text):
+            result = _DummyResult(
+                masks=_DummyMasks(xy=[np.array([[1, 2], [5, 2], [5, 6], [1, 6]])]),
+                boxes=_DummyBoxes(conf=np.array([0.91], dtype=float)),
+            )
+            return [result]
+
+    output = run_slice_inference(
+        image_rgb=np.zeros((8, 8, 3), dtype=np.uint8),
+        weight_path="sam3.pt",
+        prompt="plants",
+        conf=0.2,
+        iou=0.3,
+        _predictor_override=_DummyPredictor,
+    )
+
+    assert output["boxes_xyxy"].shape == (1, 4)
+    assert np.allclose(output["boxes_xyxy"][0], [1.0, 2.0, 5.0, 6.0])
+    assert np.allclose(output["scores"], np.array([0.91]))
