@@ -72,6 +72,7 @@ class SeedlingPreviewController(QObject):
         self._preview_box_size: int = 640  # pixels
         self._preview_hover_center: Optional[Tuple[float, float]] = None
         self._preview_locked_center: Optional[Tuple[float, float]] = None
+        self._layers_visible: bool = True
 
         # -- preview box overlay (dashed rect) ------------------------------
         self._preview_box_item = pg.PlotCurveItem(
@@ -207,6 +208,7 @@ class SeedlingPreviewController(QObject):
         visible : bool
             True to show, False to hide (uncheck in layer tree).
         """
+        self._layers_visible = visible
         if PREVIEW_LAYER_NAME in self._canvas._layers:
             self._canvas.set_layer_visibility(PREVIEW_LAYER_NAME, visible)
         if PREVIEW_RESULT_LAYER_NAME in self._canvas._layers:
@@ -298,7 +300,7 @@ class SeedlingPreviewController(QObject):
             True if the event was consumed by preview logic.
         """
         logger.debug(f"PreviewController received key: {event.key()} (enabled={self._preview_mode_enabled})")
-        if not self._preview_mode_enabled:
+        if not self._preview_mode_enabled or not self._layers_visible:
             return False
         if event.key() == Qt.Key.Key_Escape:
             logger.debug("Escape key detected, stopping preview mode")
@@ -327,7 +329,7 @@ class SeedlingPreviewController(QObject):
         x_coord, y_coord : float
             Hover coordinate in view space.
         """
-        if not self._preview_mode_enabled:
+        if not self._preview_mode_enabled or not self._layers_visible:
             return
         item_pos = self._canvas._item_group.mapFromParent(
             QPointF(x_coord, y_coord)
@@ -352,7 +354,7 @@ class SeedlingPreviewController(QObject):
         bool
             True if click was consumed by preview logic.
         """
-        if not self._preview_mode_enabled:
+        if not self._preview_mode_enabled or not self._layers_visible:
             return False
         if button != Qt.MouseButton.LeftButton:
             return False
@@ -418,7 +420,7 @@ class SeedlingPreviewController(QObject):
 
     def _update_preview_overlay(self) -> None:
         """Update preview box polyline rendering."""
-        if not self._preview_mode_enabled:
+        if not self._preview_mode_enabled or not self._layers_visible:
             self._preview_box_item.setVisible(False)
             return
         center_xy = (
