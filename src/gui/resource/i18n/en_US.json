@@ -112,6 +112,9 @@
     "page.seedling.msg.preview_cancelled": "Preview inference cancelled",
     "page.seedling.msg.boundary_loaded": "Boundary loaded",
     "page.seedling.msg.boundary_invalid": "Invalid boundary file",
+    "page.seedling.msg.no_merged_results": "Run full inference first",
+    "page.seedling.dialog.save_results": "Select output directory",
+    "page.seedling.msg.save_results_success": "Exported bbox.shp and points.shp",
     "page.seedling.btn.save_shp": "Save SHP",
 
     "page.rename.group.file": "File",

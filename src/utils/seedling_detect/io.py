@@ -128,3 +128,28 @@ def save_mask_polygon_shp(
             shp_writer.poly([polygon_xy])
             shp_writer.record(int(row.fid), float(row.score))
     _write_prj(base_path, crs_wkt)
+
+
+def export_inference_outputs(
+    out_dir: str | Path,
+    bbox_df: pd.DataFrame,
+    points_df: pd.DataFrame,
+    crs_wkt: str | None,
+) -> None:
+    """Export merged inference outputs as shapefiles.
+
+    Parameters
+    ----------
+    out_dir : str | Path
+        Output directory.
+    bbox_df : pandas.DataFrame
+        Bounding box table for ``bbox.shp``.
+    points_df : pandas.DataFrame
+        Center point table for ``points.shp``.
+    crs_wkt : str | None
+        CRS WKT text for PRJ sidecar files.
+    """
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    save_bbox_shp(bbox_df, out_path / "bbox.shp", crs_wkt)
+    save_point_shp(points_df, out_path / "points.shp", crs_wkt)

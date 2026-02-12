@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.utils.seedling_detect.io import (
+    export_inference_outputs,
     save_bbox_shp,
     save_mask_polygon_shp,
     save_point_shp,
@@ -56,3 +57,36 @@ def test_save_bbox_and_mask_shp_writes_files(tmp_path: Path) -> None:
 
     assert (tmp_path / "bbox.shp").exists()
     assert (tmp_path / "mask.shp").exists()
+
+
+def test_export_inference_outputs_writes_bbox_and_points(tmp_path: Path) -> None:
+    """Inference export writes bbox and center point shapefiles."""
+    bbox_df = pd.DataFrame(
+        {
+            "fid": [0],
+            "xmin": [0.0],
+            "ymin": [0.0],
+            "xmax": [10.0],
+            "ymax": [6.0],
+            "score": [0.95],
+        }
+    )
+    points_df = pd.DataFrame(
+        {
+            "fid": [0],
+            "x": [5.0],
+            "y": [3.0],
+            "source": ["sam3"],
+            "conf": [0.95],
+        }
+    )
+
+    export_inference_outputs(
+        out_dir=tmp_path,
+        bbox_df=bbox_df,
+        points_df=points_df,
+        crs_wkt=None,
+    )
+
+    assert (tmp_path / "bbox.shp").exists()
+    assert (tmp_path / "points.shp").exists()

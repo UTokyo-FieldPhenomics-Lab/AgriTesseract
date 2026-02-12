@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+
+import numpy as np
+import pandas as pd
+import rasterio
 from loguru import logger
 
 from PySide6.QtCore import QThread, Qt, Signal, Slot
@@ -43,6 +47,7 @@ from src.utils.seedling_detect.qthread import (
 )
 from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
 from src.utils.seedling_detect.slice import merge_slice_detections
+from src.utils.seedling_detect.io import export_inference_outputs
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:
@@ -285,7 +290,7 @@ class SeedlingTab(TabInterface):
         bar.addSeparator()
 
         self.btn_save_shp = PrimaryPushButton(tr("page.seedling.btn.save_shp"))
-        self.btn_save_shp.clicked.connect(self.sigSavePoints.emit)
+        self.btn_save_shp.clicked.connect(self._on_save_shp_clicked)
 
         bar.addWidget(self.btn_save_shp)
         bar.addWidget(self._bar_spacer())
@@ -776,6 +781,76 @@ class SeedlingTab(TabInterface):
             duration=1800,
         )
         self._teardown_full_thread()
+
+    @Slot()
+    def _on_save_shp_clicked(self) -> None:
+        """Export merged inference bbox/points results to shapefiles."""
+        if self._last_full_result is None or "merged" not in self._last_full_result:
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.seedling.msg.no_merged_results"),
+                parent=self,
+                duration=2500,
+            )
+            return
+        out_dir = QFileDialog.getExistingDirectory(
+            self,
+            tr("page.seedling.dialog.save_results"),
+            "",
+        )
+        if not out_dir:
+            return
+        bbox_df, points_df = self._build_export_frames(self._last_full_result["merged"])
+        export_inference_outputs(
+            out_dir=out_dir,
+            bbox_df=bbox_df,
+            points_df=points_df,
+            crs_wkt=self._current_dom_crs_wkt(),
+        )
+        InfoBar.success(
+            title=tr("success"),
+            content=tr("page.seedling.msg.save_results_success"),
+            parent=self,
+            duration=2500,
+        )
+
+    def _build_export_frames(
+        self, merged_result: dict
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Build bbox/point dataframes from merged inference payload."""
+        boxes_xyxy = np.asarray(merged_result.get("boxes_xyxy", np.zeros((0, 4))))
+        scores = np.asarray(merged_result.get("scores", np.zeros((0,))))
+        points_xy = np.asarray(merged_result.get("points_xy", np.zeros((0, 2))))
+        fid_values = np.arange(boxes_xyxy.shape[0], dtype=int)
+        bbox_df = pd.DataFrame(
+            {
+                "fid": fid_values,
+                "xmin": boxes_xyxy[:, 0] if boxes_xyxy.size else [],
+                "ymin": boxes_xyxy[:, 1] if boxes_xyxy.size else [],
+                "xmax": boxes_xyxy[:, 2] if boxes_xyxy.size else [],
+                "ymax": boxes_xyxy[:, 3] if boxes_xyxy.size else [],
+                "score": scores if scores.size else [],
+            }
+        )
+        points_df = pd.DataFrame(
+            {
+                "fid": fid_values,
+                "x": points_xy[:, 0] if points_xy.size else [],
+                "y": points_xy[:, 1] if points_xy.size else [],
+                "source": ["sam3"] * len(fid_values),
+                "conf": scores if scores.size else [],
+            }
+        )
+        return bbox_df, points_df
+
+    def _current_dom_crs_wkt(self) -> str | None:
+        """Read current DOM CRS WKT text for PRJ export."""
+        if not self._dom_path:
+            return None
+        with rasterio.open(self._dom_path) as dataset:
+            if dataset.crs is None:
+                return None
+            return dataset.crs.to_wkt()
 
     @Slot()
     def _on_load_dom(self) -> None:

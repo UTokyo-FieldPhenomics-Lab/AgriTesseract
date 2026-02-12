@@ -112,6 +112,9 @@
     "page.seedling.msg.preview_cancelled": "プレビュー推論をキャンセルしました",
     "page.seedling.msg.boundary_loaded": "境界を読み込みました",
     "page.seedling.msg.boundary_invalid": "境界ファイルが無効です",
+    "page.seedling.msg.no_merged_results": "先に全体推論を実行してください",
+    "page.seedling.dialog.save_results": "出力フォルダを選択",
+    "page.seedling.msg.save_results_success": "bbox.shp と points.shp を出力しました",
     "page.seedling.btn.save_shp": "SHP保存",
 
     "page.rename.group.file": "ファイル",
