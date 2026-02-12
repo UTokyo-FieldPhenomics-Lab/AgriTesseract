@@ -14,3 +14,6 @@ wheels/
 # App generated configs
 config.json
 /app
+
+# Local git worktrees
+.worktrees/
