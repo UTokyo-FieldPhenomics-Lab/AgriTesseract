@@ -225,9 +225,80 @@ def _pairwise_iou_xyxy(base_box: np.ndarray, candidate_boxes: np.ndarray) -> np.
     return inter_area / union_area
 
 
+def _pairwise_ios_xyxy(base_box: np.ndarray, candidate_boxes: np.ndarray) -> np.ndarray:
+    """Compute IoS against candidate boxes."""
+    xx0 = np.maximum(base_box[0], candidate_boxes[:, 0])
+    yy0 = np.maximum(base_box[1], candidate_boxes[:, 1])
+    xx1 = np.minimum(base_box[2], candidate_boxes[:, 2])
+    yy1 = np.minimum(base_box[3], candidate_boxes[:, 3])
+    inter_w = np.maximum(0.0, xx1 - xx0)
+    inter_h = np.maximum(0.0, yy1 - yy0)
+    inter_area = inter_w * inter_h
+    base_area = max(0.0, (base_box[2] - base_box[0]) * (base_box[3] - base_box[1]))
+    cand_area = np.maximum(
+        0.0,
+        (candidate_boxes[:, 2] - candidate_boxes[:, 0])
+        * (candidate_boxes[:, 3] - candidate_boxes[:, 1]),
+    )
+    smaller_area = np.maximum(1e-9, np.minimum(base_area, cand_area))
+    return inter_area / smaller_area
+
+
+def nms_with_ios_xyxy(
+    boxes_xyxy: np.ndarray,
+    scores: np.ndarray,
+    iou_threshold: float,
+    ios_threshold: float,
+) -> list[int]:
+    """Apply IoU NMS first, then IoS-based containment suppression."""
+    keep = nms_boxes_xyxy(boxes_xyxy, scores, iou_threshold)
+    if len(keep) < 2:
+        return keep
+    kept_boxes = boxes_xyxy[keep]
+    suppressed = np.zeros((len(keep),), dtype=bool)
+    for idx in range(len(keep)):
+        if suppressed[idx]:
+            continue
+        if idx + 1 >= len(keep):
+            break
+        ios_values = _pairwise_ios_xyxy(kept_boxes[idx], kept_boxes[idx + 1 :])
+        suppressed[idx + 1 :] |= ios_values > float(ios_threshold)
+    return [keep[idx] for idx in range(len(keep)) if not suppressed[idx]]
+
+
+def _filter_slice_boundary_boxes(
+    boxes_px: np.ndarray,
+    slice_shape: tuple[int, int],
+    is_edge: dict[str, bool],
+    border_threshold_px: float,
+) -> np.ndarray:
+    """Return keep mask for boxes not touching non-global slice borders."""
+    if boxes_px.size == 0:
+        return np.zeros((0,), dtype=bool)
+    slice_width, slice_height = slice_shape
+    x0 = boxes_px[:, 0]
+    y0 = boxes_px[:, 1]
+    x1 = boxes_px[:, 2]
+    y1 = boxes_px[:, 3]
+    keep_mask = np.ones((boxes_px.shape[0],), dtype=bool)
+    if not is_edge.get("left", False):
+        keep_mask &= x0 > border_threshold_px
+    if not is_edge.get("top", False):
+        keep_mask &= y0 > border_threshold_px
+    if not is_edge.get("right", False):
+        keep_mask &= x1 < (float(slice_width) - border_threshold_px)
+    if not is_edge.get("bottom", False):
+        keep_mask &= y1 < (float(slice_height) - border_threshold_px)
+    return keep_mask
+
+
 def merge_slice_detections(
     slice_result_list: list[dict],
     iou_threshold: float,
+    ios_threshold: float = 0.95,
+    remove_boundary: bool = True,
+    remove_overlay: bool = True,
+    border_threshold_px: float = 2.0,
 ) -> dict[str, np.ndarray]:
     """Merge per-slice detection boxes with global NMS.
 
@@ -237,6 +308,14 @@ def merge_slice_detections(
         List of per-slice result dicts containing ``boxes_geo`` and ``scores``.
     iou_threshold : float
         IoU threshold for NMS.
+    ios_threshold : float, optional
+        IoS threshold for containment suppression.
+    remove_boundary : bool, optional
+        Whether to remove detections touching non-global slice borders.
+    remove_overlay : bool, optional
+        Whether to remove contain/contained boxes via IoS.
+    border_threshold_px : float, optional
+        Pixel threshold for edge-touch filtering.
 
     Returns
     -------
@@ -246,12 +325,23 @@ def merge_slice_detections(
     box_chunks: list[np.ndarray] = []
     score_chunks: list[np.ndarray] = []
     for result in slice_result_list:
-        boxes = np.asarray(result.get("boxes_geo", np.zeros((0, 4))), dtype=float)
+        boxes_geo = np.asarray(result.get("boxes_geo", np.zeros((0, 4))), dtype=float)
+        boxes_px = np.asarray(result.get("boxes_px", np.zeros((0, 4))), dtype=float)
         scores = np.asarray(result.get("scores", np.zeros((0,))), dtype=float)
-        if boxes.size == 0 or scores.size == 0:
+        if boxes_geo.size == 0 or scores.size == 0:
             continue
-        box_chunks.append(boxes)
-        score_chunks.append(scores)
+        keep_mask = np.ones((scores.shape[0],), dtype=bool)
+        if remove_boundary and boxes_px.shape[0] == scores.shape[0]:
+            keep_mask &= _filter_slice_boundary_boxes(
+                boxes_px=boxes_px,
+                slice_shape=tuple(result.get("slice_shape", (0, 0))),
+                is_edge=result.get("is_edge", {}),
+                border_threshold_px=border_threshold_px,
+            )
+        if not np.any(keep_mask):
+            continue
+        box_chunks.append(boxes_geo[keep_mask])
+        score_chunks.append(scores[keep_mask])
     if not box_chunks:
         empty_boxes = np.zeros((0, 4), dtype=float)
         return {
@@ -261,7 +351,17 @@ def merge_slice_detections(
         }
     all_boxes = np.concatenate(box_chunks, axis=0)
     all_scores = np.concatenate(score_chunks, axis=0)
-    keep_indices = nms_boxes_xyxy(all_boxes, all_scores, iou_threshold=iou_threshold)
+    if remove_overlay:
+        keep_indices = nms_with_ios_xyxy(
+            all_boxes,
+            all_scores,
+            iou_threshold=iou_threshold,
+            ios_threshold=ios_threshold,
+        )
+    else:
+        keep_indices = nms_boxes_xyxy(
+            all_boxes, all_scores, iou_threshold=iou_threshold
+        )
     merged_boxes = all_boxes[keep_indices]
     merged_scores = all_scores[keep_indices]
     return {

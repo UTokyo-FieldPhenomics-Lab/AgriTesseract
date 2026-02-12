@@ -8,6 +8,7 @@ from src.utils.seedling_detect.slice import (
     filter_slice_windows_by_boundary,
     generate_slice_windows,
     merge_slice_detections,
+    nms_with_ios_xyxy,
     nms_boxes_xyxy,
 )
 
@@ -94,3 +95,50 @@ def test_merge_slice_detections_applies_nms_and_centers() -> None:
     assert merged["boxes_xyxy"].shape == (2, 4)
     assert np.allclose(merged["scores"], np.array([0.9, 0.8]))
     assert merged["points_xy"].shape == (2, 2)
+
+
+def test_nms_with_ios_suppresses_contained_boxes() -> None:
+    """IoS post-processing removes contain/contained duplicate boxes."""
+    boxes_xyxy = np.array(
+        [[0.0, 0.0, 30.0, 30.0], [5.0, 5.0, 15.0, 15.0], [50.0, 50.0, 70.0, 70.0]],
+        dtype=float,
+    )
+    scores = np.array([0.95, 0.9, 0.7], dtype=float)
+    keep = nms_with_ios_xyxy(
+        boxes_xyxy,
+        scores,
+        iou_threshold=0.9,
+        ios_threshold=0.95,
+    )
+
+    assert keep == [0, 2]
+
+
+def test_merge_slice_detections_can_drop_non_global_border_boxes() -> None:
+    """Boundary filter removes edge-touch boxes on inner slices only."""
+    slices = [
+        {
+            "boxes_px": np.array([[0.5, 3.0, 20.0, 20.0]], dtype=float),
+            "boxes_geo": np.array([[100.0, 100.0, 120.0, 120.0]], dtype=float),
+            "scores": np.array([0.8], dtype=float),
+            "slice_shape": (64, 64),
+            "is_edge": {"left": False, "top": False, "right": False, "bottom": False},
+        },
+        {
+            "boxes_px": np.array([[0.5, 3.0, 20.0, 20.0]], dtype=float),
+            "boxes_geo": np.array([[200.0, 100.0, 220.0, 120.0]], dtype=float),
+            "scores": np.array([0.85], dtype=float),
+            "slice_shape": (64, 64),
+            "is_edge": {"left": True, "top": False, "right": False, "bottom": False},
+        },
+    ]
+
+    merged = merge_slice_detections(
+        slices,
+        iou_threshold=0.5,
+        remove_boundary=True,
+        remove_overlay=False,
+    )
+
+    assert merged["boxes_xyxy"].shape == (1, 4)
+    assert np.allclose(merged["boxes_xyxy"][0], np.array([200.0, 100.0, 220.0, 120.0]))

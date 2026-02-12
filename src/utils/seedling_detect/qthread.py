@@ -162,6 +162,14 @@ class SeedlingInferenceWorker(QObject):
             if self._cancelled:
                 return {"slices": slice_results}
             image_rgb, transform = _read_window_image(dataset, window)
+            slice_width = int(window.x1 - window.x0)
+            slice_height = int(window.y1 - window.y0)
+            edge_flags = {
+                "left": window.x0 == 0,
+                "top": window.y0 == 0,
+                "right": window.x1 >= dataset.width,
+                "bottom": window.y1 >= dataset.height,
+            }
             result = run_slice_inference(
                 image_rgb=image_rgb,
                 weight_path=self.payload.weight_path,
@@ -171,7 +179,15 @@ class SeedlingInferenceWorker(QObject):
                 cache_dir=self.payload.cache_dir,
                 predictor=predictor,
             )
-            slice_results.append(_build_slice_result(result, transform, window))
+            slice_results.append(
+                _build_slice_result(
+                    result=result,
+                    transform=transform,
+                    window=window,
+                    slice_shape=(slice_width, slice_height),
+                    is_edge=edge_flags,
+                )
+            )
             percent = int(((idx + 1) / total) * 100)
             self.sigProgress.emit(percent)
         return {
@@ -220,20 +236,36 @@ def _affine_xy(
     return float(point_xy[0]), float(point_xy[1])
 
 
-def _build_slice_result(result: dict, transform: Affine, window: SliceWindow) -> dict:
+def _build_slice_result(
+    result: dict,
+    transform: Affine,
+    window: SliceWindow,
+    slice_shape: tuple[int, int],
+    is_edge: dict[str, bool],
+) -> dict:
     """Build one serializable slice result payload."""
     polygons_geo = [
         polygon_px_to_geo(poly, transform) for poly in result["polygons_px"]
     ]
+    boxes_px = np.asarray(result["boxes_xyxy"], dtype=float)
     boxes_geo = _boxes_px_to_geo(
-        np.asarray(result["boxes_xyxy"], dtype=float), transform
+        boxes_px,
+        transform,
     )
     return {
         "row": int(window.row),
         "col": int(window.col),
+        "boxes_px": boxes_px,
         "boxes_geo": boxes_geo,
         "scores": np.asarray(result["scores"], dtype=float),
         "polygons_geo": polygons_geo,
+        "slice_shape": (int(slice_shape[0]), int(slice_shape[1])),
+        "is_edge": {
+            "left": bool(is_edge.get("left", False)),
+            "top": bool(is_edge.get("top", False)),
+            "right": bool(is_edge.get("right", False)),
+            "bottom": bool(is_edge.get("bottom", False)),
+        },
     }
 
 

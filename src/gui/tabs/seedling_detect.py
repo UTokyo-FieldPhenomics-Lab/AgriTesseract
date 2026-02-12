@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     Action,
     BodyLabel,
+    CheckBox,
     CommandBar,
     DoubleSpinBox,
     FluentIcon as FIF,
@@ -278,10 +279,7 @@ class SeedlingTab(TabInterface):
         bar = self._new_command_bar()
         self.btn_load_boundary = PushButton(tr("page.seedling.btn.load_boundary"))
         self.btn_load_boundary.clicked.connect(self._on_load_boundary)
-        self.label_boundary = BodyLabel(tr("page.seedling.label.no_boundary"))
-        self.label_boundary.setMinimumWidth(220)
         bar.addWidget(self.btn_load_boundary)
-        bar.addWidget(self.label_boundary)
         bar.addSeparator()
         bar.addWidget(self._build_execute_section())
         bar.addSeparator()
@@ -430,7 +428,6 @@ class SeedlingTab(TabInterface):
             )
             return
         self._boundary_file_path = file_path
-        self.label_boundary.setText(Path(file_path).name)
         self.map_component.map_canvas.add_vector_layer(
             self._boundary_roi,
             "Boundary",
@@ -612,6 +609,22 @@ class SeedlingTab(TabInterface):
         self.spin_overlap.setValue(0.2)
         self.spin_overlap.setSingleStep(0.05)
 
+        self.spin_iou_thresh = DoubleSpinBox()
+        self.spin_iou_thresh.setRange(0.05, 0.95)
+        self.spin_iou_thresh.setValue(0.5)
+        self.spin_iou_thresh.setSingleStep(0.05)
+
+        self.check_rm_boundary = CheckBox(tr("page.seedling.check.rm_boundary"))
+        self.check_rm_boundary.setChecked(True)
+
+        self.check_rm_overlay = CheckBox(tr("page.seedling.check.rm_overlay"))
+        self.check_rm_overlay.setChecked(True)
+
+        self.spin_ios_thresh = DoubleSpinBox()
+        self.spin_ios_thresh.setRange(0.5, 1.0)
+        self.spin_ios_thresh.setValue(0.95)
+        self.spin_ios_thresh.setSingleStep(0.01)
+
         self.btn_start_inference = PrimaryPushButton(
             tr("page.seedling.btn.start_inference")
         )
@@ -634,6 +647,23 @@ class SeedlingTab(TabInterface):
         )
         layout.addWidget(self.btn_slice_preview)
         layout.addWidget(self.btn_start_inference)
+        layout.addWidget(
+            self._build_labeled_spin(
+                "page.seedling.label.iou_thresh", self.spin_iou_thresh
+            )
+        )
+        layout.addWidget(self.check_rm_boundary)
+        layout.addWidget(self.check_rm_overlay)
+        layout.addWidget(
+            self._build_labeled_spin(
+                "page.seedling.label.ios_thresh", self.spin_ios_thresh
+            )
+        )
+
+        self.check_rm_boundary.toggled.connect(self._refresh_full_inference_layers)
+        self.check_rm_overlay.toggled.connect(self._refresh_full_inference_layers)
+        self.spin_iou_thresh.valueChanged.connect(self._refresh_full_inference_layers)
+        self.spin_ios_thresh.valueChanged.connect(self._refresh_full_inference_layers)
         return wrapper
 
     @Slot()
@@ -697,22 +727,32 @@ class SeedlingTab(TabInterface):
     def _on_full_inference_finished(self, result_payload: dict) -> None:
         """Store full-map inference result and cleanup worker."""
         self._last_full_result = result_payload
+        self._refresh_full_inference_layers(notify=True)
+        self._teardown_full_thread()
+
+    def _refresh_full_inference_layers(self, *_args, notify: bool = False) -> None:
+        """Apply selected post-filters and refresh result layers."""
+        if self._last_full_result is None:
+            return
         merged_result = merge_slice_detections(
-            slice_result_list=result_payload.get("slices", []),
-            iou_threshold=float(self.spin_iou.value()),
+            slice_result_list=self._last_full_result.get("slices", []),
+            iou_threshold=float(self.spin_iou_thresh.value()),
+            ios_threshold=float(self.spin_ios_thresh.value()),
+            remove_boundary=bool(self.check_rm_boundary.isChecked()),
+            remove_overlay=bool(self.check_rm_overlay.isChecked()),
         )
         self._last_full_result["merged"] = merged_result
         self._preview_ctrl.show_inference_result_layers(
             boxes_xyxy=merged_result["boxes_xyxy"],
             points_xy=merged_result["points_xy"],
         )
-        InfoBar.success(
-            title=tr("success"),
-            content=f"Full inference done: {len(merged_result['boxes_xyxy'])} objects",
-            parent=self,
-            duration=2500,
-        )
-        self._teardown_full_thread()
+        if notify:
+            InfoBar.success(
+                title=tr("success"),
+                content=f"Full inference done: {len(merged_result['boxes_xyxy'])} objects",
+                parent=self,
+                duration=2500,
+            )
 
     @Slot(str)
     def _on_full_inference_failed(self, message: str) -> None:
