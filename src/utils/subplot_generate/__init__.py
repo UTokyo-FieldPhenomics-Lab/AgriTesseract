@@ -1,20 +1,15 @@
-"""Subplot generation submodule for EasyIDP integration.
-
-Re-exports public API from io module.
-"""
+"""Subplot generation submodule for GeoPandas workflow."""
 
 from src.utils.subplot_generate.io import (
-    build_generate_kwargs,
     calculate_optimal_rotation,
-    generate_and_save,
-    generate_subplots_roi,
-    load_boundary_roi,
+    generate_and_save_gdf,
+    generate_subplots_gdf,
+    load_boundary_gdf,
 )
 
 __all__ = [
-    "build_generate_kwargs",
     "calculate_optimal_rotation",
-    "generate_and_save",
-    "generate_subplots_roi",
-    "load_boundary_roi",
+    "generate_and_save_gdf",
+    "generate_subplots_gdf",
+    "load_boundary_gdf",
 ]
