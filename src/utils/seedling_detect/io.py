@@ -131,7 +131,7 @@ def save_mask_polygon_shp(
 
 
 def export_inference_outputs(
-    out_dir: str | Path,
+    out_prefix: str | Path,
     bbox_df: pd.DataFrame,
     points_df: pd.DataFrame,
     polygon_df: pd.DataFrame,
@@ -141,8 +141,8 @@ def export_inference_outputs(
 
     Parameters
     ----------
-    out_dir : str | Path
-        Output directory.
+    out_prefix : str | Path
+        Output path prefix (directory + basename).
     bbox_df : pandas.DataFrame
         Bounding box table for ``bbox.shp``.
     points_df : pandas.DataFrame
@@ -152,8 +152,16 @@ def export_inference_outputs(
     crs_wkt : str | None
         CRS WKT text for PRJ sidecar files.
     """
-    out_path = Path(out_dir)
-    out_path.mkdir(parents=True, exist_ok=True)
-    save_bbox_shp(bbox_df, out_path / "bbox.shp", crs_wkt)
-    save_point_shp(points_df, out_path / "points.shp", crs_wkt)
-    save_mask_polygon_shp(polygon_df, out_path / "polygon.shp", crs_wkt)
+    prefix_path = Path(out_prefix)
+    prefix_path.parent.mkdir(parents=True, exist_ok=True)
+    save_bbox_shp(bbox_df, prefix_path.parent / f"{prefix_path.name}_bbox.shp", crs_wkt)
+    save_point_shp(
+        points_df,
+        prefix_path.parent / f"{prefix_path.name}_points.shp",
+        crs_wkt,
+    )
+    save_mask_polygon_shp(
+        polygon_df,
+        prefix_path.parent / f"{prefix_path.name}_polygon.shp",
+        crs_wkt,
+    )

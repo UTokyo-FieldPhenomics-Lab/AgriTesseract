@@ -59,8 +59,8 @@ def test_save_bbox_and_mask_shp_writes_files(tmp_path: Path) -> None:
     assert (tmp_path / "mask.shp").exists()
 
 
-def test_export_inference_outputs_writes_bbox_and_points(tmp_path: Path) -> None:
-    """Inference export writes bbox, points, and polygon shapefiles."""
+def test_export_inference_outputs_uses_prefix_path(tmp_path: Path) -> None:
+    """Inference export writes prefixed bbox/points/polygon shapefiles."""
     bbox_df = pd.DataFrame(
         {
             "fid": [0],
@@ -89,13 +89,13 @@ def test_export_inference_outputs_writes_bbox_and_points(tmp_path: Path) -> None
     )
 
     export_inference_outputs(
-        out_dir=tmp_path,
+        out_prefix=tmp_path / "demo",
         bbox_df=bbox_df,
         points_df=points_df,
         polygon_df=polygon_df,
         crs_wkt=None,
     )
 
-    assert (tmp_path / "bbox.shp").exists()
-    assert (tmp_path / "points.shp").exists()
-    assert (tmp_path / "polygon.shp").exists()
+    assert (tmp_path / "demo_bbox.shp").exists()
+    assert (tmp_path / "demo_points.shp").exists()
+    assert (tmp_path / "demo_polygon.shp").exists()

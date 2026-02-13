@@ -113,10 +113,10 @@
     "page.seedling.msg.boundary_loaded": "Boundary loaded",
     "page.seedling.msg.boundary_invalid": "Invalid boundary file",
     "page.seedling.msg.no_merged_results": "Run full inference first",
-    "page.seedling.dialog.save_results": "Select output directory",
+    "page.seedling.dialog.save_results": "Select output prefix path",
     "page.seedling.msg.save_results_success": "Exported bbox.shp / polygon.shp / points.shp",
     "page.seedling.btn.save_shp": "Save SHP",
-    "page.seedling.btn.send_to_next": "send to next =>",
+    "page.seedling.btn.send_to_next": "send to next",
     "page.seedling.msg.save_first_before_send": "Save SHP first",
     "page.seedling.msg.sent_to_next": "Points sent to Rename IDs",
 

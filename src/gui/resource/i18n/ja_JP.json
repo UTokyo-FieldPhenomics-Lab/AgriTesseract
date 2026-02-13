@@ -113,10 +113,10 @@
     "page.seedling.msg.boundary_loaded": "境界を読み込みました",
     "page.seedling.msg.boundary_invalid": "境界ファイルが無効です",
     "page.seedling.msg.no_merged_results": "先に全体推論を実行してください",
-    "page.seedling.dialog.save_results": "出力フォルダを選択",
+    "page.seedling.dialog.save_results": "出力プレフィックスを選択",
     "page.seedling.msg.save_results_success": "bbox.shp / polygon.shp / points.shp を出力しました",
     "page.seedling.btn.save_shp": "SHP保存",
-    "page.seedling.btn.send_to_next": "send to next =>",
+    "page.seedling.btn.send_to_next": "send to next",
     "page.seedling.msg.save_first_before_send": "先にSHPを保存してください",
     "page.seedling.msg.sent_to_next": "ポイント結果をRename IDsへ送信しました",
 

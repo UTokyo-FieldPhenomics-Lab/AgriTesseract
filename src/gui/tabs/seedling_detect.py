@@ -7,6 +7,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import pyqtgraph as pg
 import rasterio
 from loguru import logger
 
@@ -84,6 +85,7 @@ class SeedlingTab(TabInterface):
         self._full_worker: Optional[SeedlingInferenceWorker] = None
         self._last_full_result: Optional[dict] = None
         self._last_export_points_path: str = ""
+        self._last_export_prefix_path: str = ""
         self.stateTooltip: Optional[StateToolTip] = None
         self._init_controls()
         self._connect_preview_interaction()
@@ -758,11 +760,17 @@ class SeedlingTab(TabInterface):
         )
         self._last_full_result["merged"] = merged_result
         boxes_xyxy = np.asarray(merged_result.get("boxes_xyxy", np.zeros((0, 4))))
+        raw_polygons = merged_result.get("polygons_xy", [])
+        polygon_list = raw_polygons if isinstance(raw_polygons, list) else []
+        polygons_xy = [np.asarray(poly_xy, dtype=float) for poly_xy in polygon_list]
         points_xy = np.asarray(merged_result.get("points_xy", np.zeros((0, 2))))
         self._preview_ctrl.show_inference_result_layers(
             boxes_xyxy=boxes_xyxy,
+            polygons_xy=polygons_xy,
             points_xy=points_xy,
         )
+        self.btn_save_shp.setEnabled(bool(boxes_xyxy.shape[0] > 0))
+        self.btn_send_to_next.setEnabled(bool(boxes_xyxy.shape[0] > 0))
         if notify:
             InfoBar.success(
                 title=tr("success"),
@@ -805,24 +813,31 @@ class SeedlingTab(TabInterface):
                 duration=2500,
             )
             return
-        out_dir = QFileDialog.getExistingDirectory(
+        out_prefix_path, _ = QFileDialog.getSaveFileName(
             self,
             tr("page.seedling.dialog.save_results"),
             "",
+            "Shapefile Prefix (*.shp);;All Files (*)",
         )
-        if not out_dir:
+        if not out_prefix_path:
             return
+        export_prefix = Path(out_prefix_path)
+        if export_prefix.suffix.lower() == ".shp":
+            export_prefix = export_prefix.with_suffix("")
         bbox_df, points_df, polygon_df = self._build_export_frames(
             self._last_full_result["merged"]
         )
         export_inference_outputs(
-            out_dir=out_dir,
+            out_prefix=export_prefix,
             bbox_df=bbox_df,
             points_df=points_df,
             polygon_df=polygon_df,
             crs_wkt=self._current_dom_crs_wkt(),
         )
-        self._last_export_points_path = str(Path(out_dir) / "points.shp")
+        self._last_export_prefix_path = str(export_prefix)
+        self._last_export_points_path = str(
+            export_prefix.parent / f"{export_prefix.name}_points.shp"
+        )
         self.btn_send_to_next.setEnabled(True)
         InfoBar.success(
             title=tr("success"),
@@ -887,6 +902,12 @@ class SeedlingTab(TabInterface):
         """Send exported points shapefile path to rename tab."""
         if (
             not self._last_export_points_path
+            and self._last_export_prefix_path == ""
+            and self._last_full_result is not None
+        ):
+            self._export_points_to_default_cache()
+        if (
+            not self._last_export_points_path
             or not Path(self._last_export_points_path).exists()
         ):
             InfoBar.warning(
@@ -896,18 +917,89 @@ class SeedlingTab(TabInterface):
                 duration=2500,
             )
             return
-        window = self.window()
-        if not hasattr(window, "rename_tab"):
+        window_obj = self.window()
+        rename_tab = getattr(window_obj, "rename_tab", None)
+        if rename_tab is None:
             return
-        window.rename_tab.sigLoadShp.emit(self._last_export_points_path)
-        if hasattr(window, "switchTo"):
-            window.switchTo(window.rename_tab)
+        rename_tab.sigLoadShp.emit(self._last_export_points_path)
+        self._copy_points_overlay_to_rename_tab(rename_tab)
+        switch_method = getattr(window_obj, "switchTo", None)
+        if callable(switch_method):
+            switch_method(rename_tab)
+        rename_map_component = getattr(rename_tab, "map_component", None)
+        rename_canvas = (
+            getattr(rename_map_component, "map_canvas", None)
+            if rename_map_component is not None
+            else None
+        )
+        if rename_canvas is not None:
+            rename_canvas.zoom_to_layer("result_points")
         InfoBar.success(
             title=tr("success"),
             content=tr("page.seedling.msg.sent_to_next"),
             parent=self,
             duration=1800,
         )
+
+    def _export_points_to_default_cache(self) -> None:
+        """Export current merged points to cache path for send-next action."""
+        if self._last_full_result is None or "merged" not in self._last_full_result:
+            return
+        out_dir = Path(self._preview_cache_dir()) / "seedling_send_next"
+        out_prefix = out_dir / "seedling_result"
+        bbox_df, points_df, polygon_df = self._build_export_frames(
+            self._last_full_result["merged"]
+        )
+        export_inference_outputs(
+            out_prefix=out_prefix,
+            bbox_df=bbox_df,
+            points_df=points_df,
+            polygon_df=polygon_df,
+            crs_wkt=self._current_dom_crs_wkt(),
+        )
+        self._last_export_prefix_path = str(out_prefix)
+        self._last_export_points_path = str(out_dir / "seedling_result_points.shp")
+
+    def _copy_points_overlay_to_rename_tab(self, rename_tab: object) -> None:
+        """Copy merged points as overlay layer onto rename tab map canvas."""
+        if self._last_full_result is None:
+            return
+        merged = self._last_full_result.get("merged", {})
+        points_xy = np.asarray(merged.get("points_xy", np.zeros((0, 2))), dtype=float)
+        if points_xy.size == 0:
+            return
+        map_component = getattr(rename_tab, "map_component", None)
+        if map_component is None:
+            return
+        map_canvas = getattr(map_component, "map_canvas", None)
+        if map_canvas is None:
+            return
+        layer_name = "result_points"
+        map_canvas.remove_layer(layer_name)
+        scatter_item = pg.ScatterPlotItem(
+            x=points_xy[:, 0],
+            y=points_xy[:, 1],
+            symbol="o",
+            size=8,
+            pen=pg.mkPen(color="#FFAA00", width=1.2),
+            brush=pg.mkBrush(255, 120, 0, 180),
+        )
+        scatter_item.setZValue(630)
+        map_canvas.add_overlay_item(scatter_item)
+        bounds = map_canvas._calc_bounds_from_roi(
+            {
+                "result_points": np.column_stack(
+                    [points_xy, np.zeros((points_xy.shape[0], 1))]
+                )
+            }
+        )
+        map_canvas._layers[layer_name] = {
+            "item": scatter_item,
+            "visible": True,
+            "bounds": bounds,
+        }
+        map_canvas._layer_order.append(layer_name)
+        map_canvas.sigLayerAdded.emit(layer_name, "Vector")
 
     def _current_dom_crs_wkt(self) -> str | None:
         """Read current DOM CRS WKT text for PRJ export."""
@@ -930,6 +1022,10 @@ class SeedlingTab(TabInterface):
         if not file_path:
             return
         self._dom_path = file_path
+        self._last_full_result = None
+        self._last_export_points_path = ""
+        self._last_export_prefix_path = ""
+        self._preview_ctrl.clear_inference_result_layers()
         self.label_dom.setText(file_path)
         self._load_dom_to_canvas(file_path)
         self.sigLoadDom.emit(file_path)
@@ -981,11 +1077,25 @@ class SeedlingTab(TabInterface):
 
         self.btn_start_inference.setEnabled(is_preview_ready)
 
-        # Save SHP should be enabled if we have points? Or always?
-        # Usually checking if there are points to save is better, but here we stick to basic logic.
-        # It handles "save points" which might be available after inference.
-        # For now, let's enable it if DOM is ready (assuming workflow flow).
-        self.btn_save_shp.setEnabled(is_dom_ready)
+        has_merged = bool(
+            self._last_full_result is not None
+            and isinstance(self._last_full_result.get("merged", {}), dict)
+            and np.asarray(
+                self._last_full_result.get("merged", {}).get(
+                    "boxes_xyxy", np.zeros((0, 4))
+                ),
+                dtype=float,
+            ).shape[0]
+            > 0
+        )
+        self.btn_save_shp.setEnabled(has_merged)
+        self.btn_send_to_next.setEnabled(
+            bool(
+                self._last_export_points_path
+                and Path(self._last_export_points_path).exists()
+            )
+            or has_merged
+        )
 
         if not is_weight_ready:
             InfoBar.warning(
