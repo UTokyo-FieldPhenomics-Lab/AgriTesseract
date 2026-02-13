@@ -6,30 +6,29 @@ from pathlib import Path
 from typing import Optional
 
 from loguru import logger
-from PySide6.QtCore import Signal, Slot, Qt
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
-    QWidget,
-    QVBoxLayout,
     QHBoxLayout,
-    QStackedWidget,
     QSizePolicy,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 from qfluentwidgets import (
-    CheckBox,
-    InfoBar,
-    PushButton,
-    PrimaryPushButton,
-    SegmentedWidget,
-    CommandBar,
-    ComboBox,
-    SpinBox,
-    DoubleSpinBox,
-    LineEdit,
     BodyLabel,
+    ComboBox,
+    CommandBar,
+    DoubleSpinBox,
+    InfoBar,
+    LineEdit,
+    PrimaryPushButton,
+    PushButton,
+    SegmentedWidget,
+    SpinBox,
 )
 
-from src.gui.components.base_interface import PageGroup, TabInterface
+from src.gui.components.base_interface import TabInterface
 from src.gui.config import tr
 from src.utils.subplot_generate.io import (
     calculate_optimal_rotation,
@@ -138,8 +137,9 @@ class SubplotTab(TabInterface):
             self.nav.addItem(
                 routeKey=route_key,
                 text=text,
-                onClick=lambda checked=False,
-                w=widget: self.stacked_widget.setCurrentWidget(w),
+                onClick=lambda checked=False, w=widget: self.stacked_widget.setCurrentWidget(
+                    w
+                ),
             )
 
         self.stacked_widget.currentChanged.connect(self._on_tab_changed)
@@ -508,7 +508,7 @@ class SubplotTab(TabInterface):
                 duration=3000,
             )
             # self.map_component.status_bar.set_status('success', tr("page.subplot.msg.boundary_loaded"))
-        except Exception as exc:  # pragma: no cover - UI feedback branch
+        except Exception:  # pragma: no cover - UI feedback branch
             logger.exception("Failed to load boundary")
             InfoBar.error(
                 title=tr("error"),

@@ -10,8 +10,7 @@ import pandas as pd
 import pyqtgraph as pg
 import rasterio
 from loguru import logger
-
-from PySide6.QtCore import QThread, Qt, Signal, Slot
+from PySide6.QtCore import Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -21,17 +20,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from qfluentwidgets import (
-    Action,
     BodyLabel,
     CheckBox,
     CommandBar,
     DoubleSpinBox,
-    FluentIcon as FIF,
     InfoBar,
     LineEdit,
-    SegmentedWidget,
     PrimaryPushButton,
     PushButton,
+    SegmentedWidget,
     SpinBox,
     StateToolTip,
     qrouter,
@@ -40,16 +37,16 @@ from qfluentwidgets import (
 from src.gui.components.base_interface import TabInterface
 from src.gui.components.map_canvas import LayerBounds
 from src.gui.config import cfg, tr
-from src.utils.subplot_generate.io import load_boundary_gdf
+from src.utils.seedling_detect.io import export_inference_outputs
+from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
 from src.utils.seedling_detect.qthread import (
+    PreviewInferenceInput,
     SeedlingInferenceInput,
     SeedlingInferenceWorker,
-    PreviewInferenceInput,
     SeedlingPreviewWorker,
 )
-from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
 from src.utils.seedling_detect.slice import merge_slice_detections
-from src.utils.seedling_detect.io import export_inference_outputs
+from src.utils.subplot_generate.io import load_boundary_gdf
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:

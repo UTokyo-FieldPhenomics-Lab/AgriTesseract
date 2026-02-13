@@ -3,8 +3,7 @@
 import geopandas as gpd
 from shapely.geometry import Polygon
 
-from src.gui.tabs.seedling_detect import seedling_top_tab_keys
-from src.gui.tabs.seedling_detect import SeedlingTab
+from src.gui.tabs.seedling_detect import SeedlingTab, seedling_top_tab_keys
 
 
 def test_seedling_top_tab_keys_include_five_sections() -> None:

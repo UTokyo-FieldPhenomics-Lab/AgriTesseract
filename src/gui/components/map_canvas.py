@@ -13,32 +13,22 @@ References
 - dev.notes/06_demo_layer_rotation.py: Rotation and pixel picking
 """
 
-from typing import Optional, Dict, List, Tuple, Any
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
+import darkdetect
 import numpy as np
 import pyqtgraph as pg
+from loguru import logger
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QKeyEvent, QTransform
+from PySide6.QtWidgets import QMenu, QVBoxLayout, QWidget
+from qfluentwidgets import Theme
 
 # Move global config to instance level or handle dynamically
 # pg.setConfigOptions(antialias=True)
-
-from PySide6.QtWidgets import QGraphicsPathItem, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, Signal, QTimer, QRectF, QPointF, QEvent
-from PySide6.QtGui import (
-    QBrush,
-    QColor,
-    QKeyEvent,
-    QPainterPath,
-    QPen,
-    QPolygonF,
-    QTransform,
-    QWheelEvent,
-)
-from loguru import logger
 from src.gui.config import cfg
-from qfluentwidgets import Theme, isDarkTheme
-import darkdetect
 
 try:
     import rasterio
@@ -292,9 +282,7 @@ class MapCanvas(QWidget):
         menu = QMenu(self)
 
         # Focus Action (Zoom to Boundary & Align)
-        action_focus = QAction(tr("Focus"), self)
-        # Using a dummy tr key or simple text if tr not ready
-        action_focus.setText("Focus")
+        action_focus = QAction("Focus", self)
         action_focus.triggered.connect(self._focus_content)
         menu.addAction(action_focus)
 
@@ -313,7 +301,7 @@ class MapCanvas(QWidget):
                 action.triggered.connect(lambda checked, n=name: self.zoom_to_layer(n))
                 zoom_menu.addAction(action)
 
-        menu.exec_(self._plot_widget.mapToGlobal(pos))
+        menu.exec_(self._plot_widget.mapToGlobal(pos.toPoint()))
 
     def _focus_content(self):
         """Zoom to fit all content and reset rotation."""
@@ -982,24 +970,6 @@ class MapCanvas(QWidget):
         """
         return list(self._layer_order)
 
-    def zoom_to_layer(self, layer_name: str) -> None:
-        """Zoom to fit a specific layer.
-
-        Parameters
-        ----------
-        layer_name : str
-            Name of the layer to zoom to.
-        """
-        if layer_name not in self._layers:
-            return
-        bounds = self._layers[layer_name]["bounds"]
-        if not bounds:
-            return
-        width = bounds.right - bounds.left
-        height = bounds.top - bounds.bottom
-        rect = QRectF(bounds.left, bounds.bottom, width, height)
-        self._view_box.setRange(rect)
-
     def set_zoom(self, zoom_percent: float) -> None:
         """Set zoom level (percentage relative to full extent).
 
@@ -1025,10 +995,8 @@ class MapCanvas(QWidget):
 
         if is_dark:
             bg_color = "#272727"
-            fg_color = "#FFFFFF"
         else:
             bg_color = "#FFFFFF"
-            fg_color = "#000000"
 
         self._plot_widget.setBackground(bg_color)
         logger.debug(f"MapCanvas theme updated. Dark: {is_dark}")

@@ -9,7 +9,6 @@ import geopandas as gpd
 import numpy as np
 from shapely.geometry import Polygon
 
-
 VALID_KEEP_MODES = ("all", "touch", "inside")
 
 

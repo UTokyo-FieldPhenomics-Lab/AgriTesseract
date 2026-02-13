@@ -3,8 +3,8 @@
 This module locks expected runtime dependency behavior.
 """
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 
 def test_runtime_dependencies_contract() -> None:
