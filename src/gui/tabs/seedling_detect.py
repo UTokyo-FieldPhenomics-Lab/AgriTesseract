@@ -83,6 +83,7 @@ class SeedlingTab(TabInterface):
         self._full_thread: Optional[QThread] = None
         self._full_worker: Optional[SeedlingInferenceWorker] = None
         self._last_full_result: Optional[dict] = None
+        self._last_export_points_path: str = ""
         self.stateTooltip: Optional[StateToolTip] = None
         self._init_controls()
         self._connect_preview_interaction()
@@ -221,12 +222,20 @@ class SeedlingTab(TabInterface):
         self.btn_load_dom.clicked.connect(self._on_load_dom)
         self.label_dom = BodyLabel(tr("page.seedling.label.no_dom"))
         self.label_dom.setMinimumWidth(280)
+        self.btn_load_boundary = PushButton(tr("page.seedling.btn.load_boundary"))
+        self.btn_load_boundary.clicked.connect(self._on_load_boundary)
+        self.label_boundary_path = BodyLabel(tr("page.seedling.label.no_boundary"))
+        self.label_boundary_path.setMinimumWidth(220)
 
         # bar.addAction(Action(FIF.ROBOT, tr("page.seedling.group.sam")))
         # bar.addSeparator()
         bar.addWidget(self.btn_load_dom)
         bar.addSeparator()
         bar.addWidget(self.label_dom)
+        bar.addSeparator()
+        bar.addWidget(self.btn_load_boundary)
+        bar.addSeparator()
+        bar.addWidget(self.label_boundary_path)
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
         return tab
@@ -282,17 +291,17 @@ class SeedlingTab(TabInterface):
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(0, 0, 0, 0)
         bar = self._new_command_bar()
-        self.btn_load_boundary = PushButton(tr("page.seedling.btn.load_boundary"))
-        self.btn_load_boundary.clicked.connect(self._on_load_boundary)
-        bar.addWidget(self.btn_load_boundary)
-        bar.addSeparator()
         bar.addWidget(self._build_execute_section())
         bar.addSeparator()
 
         self.btn_save_shp = PrimaryPushButton(tr("page.seedling.btn.save_shp"))
         self.btn_save_shp.clicked.connect(self._on_save_shp_clicked)
+        self.btn_send_to_next = PushButton(tr("page.seedling.btn.send_to_next"))
+        self.btn_send_to_next.clicked.connect(self._on_send_to_next_clicked)
+        self.btn_send_to_next.setEnabled(False)
 
         bar.addWidget(self.btn_save_shp)
+        bar.addWidget(self.btn_send_to_next)
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
         return tab
@@ -433,6 +442,7 @@ class SeedlingTab(TabInterface):
             )
             return
         self._boundary_file_path = file_path
+        self.label_boundary_path.setText(file_path)
         self.map_component.map_canvas.add_vector_layer(
             self._boundary_roi,
             "Boundary",
@@ -747,14 +757,16 @@ class SeedlingTab(TabInterface):
             remove_overlay=bool(self.check_rm_overlay.isChecked()),
         )
         self._last_full_result["merged"] = merged_result
+        boxes_xyxy = np.asarray(merged_result.get("boxes_xyxy", np.zeros((0, 4))))
+        points_xy = np.asarray(merged_result.get("points_xy", np.zeros((0, 2))))
         self._preview_ctrl.show_inference_result_layers(
-            boxes_xyxy=merged_result["boxes_xyxy"],
-            points_xy=merged_result["points_xy"],
+            boxes_xyxy=boxes_xyxy,
+            points_xy=points_xy,
         )
         if notify:
             InfoBar.success(
                 title=tr("success"),
-                content=f"Full inference done: {len(merged_result['boxes_xyxy'])} objects",
+                content=f"Full inference done: {boxes_xyxy.shape[0]} objects",
                 parent=self,
                 duration=2500,
             )
@@ -800,13 +812,18 @@ class SeedlingTab(TabInterface):
         )
         if not out_dir:
             return
-        bbox_df, points_df = self._build_export_frames(self._last_full_result["merged"])
+        bbox_df, points_df, polygon_df = self._build_export_frames(
+            self._last_full_result["merged"]
+        )
         export_inference_outputs(
             out_dir=out_dir,
             bbox_df=bbox_df,
             points_df=points_df,
+            polygon_df=polygon_df,
             crs_wkt=self._current_dom_crs_wkt(),
         )
+        self._last_export_points_path = str(Path(out_dir) / "points.shp")
+        self.btn_send_to_next.setEnabled(True)
         InfoBar.success(
             title=tr("success"),
             content=tr("page.seedling.msg.save_results_success"),
@@ -816,11 +833,12 @@ class SeedlingTab(TabInterface):
 
     def _build_export_frames(
         self, merged_result: dict
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Build bbox/point dataframes from merged inference payload."""
         boxes_xyxy = np.asarray(merged_result.get("boxes_xyxy", np.zeros((0, 4))))
         scores = np.asarray(merged_result.get("scores", np.zeros((0,))))
         points_xy = np.asarray(merged_result.get("points_xy", np.zeros((0, 2))))
+        polygons_xy = list(merged_result.get("polygons_xy", []))
         fid_values = np.arange(boxes_xyxy.shape[0], dtype=int)
         bbox_df = pd.DataFrame(
             {
@@ -841,7 +859,55 @@ class SeedlingTab(TabInterface):
                 "conf": scores if scores.size else [],
             }
         )
-        return bbox_df, points_df
+        if len(polygons_xy) != len(fid_values):
+            polygons_xy = [
+                [
+                    (float(box_row[0]), float(box_row[1])),
+                    (float(box_row[2]), float(box_row[1])),
+                    (float(box_row[2]), float(box_row[3])),
+                    (float(box_row[0]), float(box_row[3])),
+                    (float(box_row[0]), float(box_row[1])),
+                ]
+                for box_row in boxes_xyxy
+            ]
+        polygon_df = pd.DataFrame(
+            {
+                "fid": fid_values,
+                "score": scores if scores.size else [],
+                "polygon": [
+                    [(float(x), float(y)) for x, y in np.asarray(poly_xy, dtype=float)]
+                    for poly_xy in polygons_xy
+                ],
+            }
+        )
+        return bbox_df, points_df, polygon_df
+
+    @Slot()
+    def _on_send_to_next_clicked(self) -> None:
+        """Send exported points shapefile path to rename tab."""
+        if (
+            not self._last_export_points_path
+            or not Path(self._last_export_points_path).exists()
+        ):
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.seedling.msg.save_first_before_send"),
+                parent=self,
+                duration=2500,
+            )
+            return
+        window = self.window()
+        if not hasattr(window, "rename_tab"):
+            return
+        window.rename_tab.sigLoadShp.emit(self._last_export_points_path)
+        if hasattr(window, "switchTo"):
+            window.switchTo(window.rename_tab)
+        InfoBar.success(
+            title=tr("success"),
+            content=tr("page.seedling.msg.sent_to_next"),
+            parent=self,
+            duration=1800,
+        )
 
     def _current_dom_crs_wkt(self) -> str | None:
         """Read current DOM CRS WKT text for PRJ export."""
@@ -864,7 +930,7 @@ class SeedlingTab(TabInterface):
         if not file_path:
             return
         self._dom_path = file_path
-        self.label_dom.setText(Path(file_path).name)
+        self.label_dom.setText(file_path)
         self._load_dom_to_canvas(file_path)
         self.sigLoadDom.emit(file_path)
 

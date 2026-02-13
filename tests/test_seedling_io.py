@@ -60,7 +60,7 @@ def test_save_bbox_and_mask_shp_writes_files(tmp_path: Path) -> None:
 
 
 def test_export_inference_outputs_writes_bbox_and_points(tmp_path: Path) -> None:
-    """Inference export writes bbox and center point shapefiles."""
+    """Inference export writes bbox, points, and polygon shapefiles."""
     bbox_df = pd.DataFrame(
         {
             "fid": [0],
@@ -80,13 +80,22 @@ def test_export_inference_outputs_writes_bbox_and_points(tmp_path: Path) -> None
             "conf": [0.95],
         }
     )
+    polygon_df = pd.DataFrame(
+        {
+            "fid": [0],
+            "score": [0.95],
+            "polygon": [[(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)]],
+        }
+    )
 
     export_inference_outputs(
         out_dir=tmp_path,
         bbox_df=bbox_df,
         points_df=points_df,
+        polygon_df=polygon_df,
         crs_wkt=None,
     )
 
     assert (tmp_path / "bbox.shp").exists()
     assert (tmp_path / "points.shp").exists()
+    assert (tmp_path / "polygon.shp").exists()

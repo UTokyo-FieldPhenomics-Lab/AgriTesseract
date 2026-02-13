@@ -134,6 +134,7 @@ def export_inference_outputs(
     out_dir: str | Path,
     bbox_df: pd.DataFrame,
     points_df: pd.DataFrame,
+    polygon_df: pd.DataFrame,
     crs_wkt: str | None,
 ) -> None:
     """Export merged inference outputs as shapefiles.
@@ -146,6 +147,8 @@ def export_inference_outputs(
         Bounding box table for ``bbox.shp``.
     points_df : pandas.DataFrame
         Center point table for ``points.shp``.
+    polygon_df : pandas.DataFrame
+        Polygon table for ``polygon.shp``.
     crs_wkt : str | None
         CRS WKT text for PRJ sidecar files.
     """
@@ -153,3 +156,4 @@ def export_inference_outputs(
     out_path.mkdir(parents=True, exist_ok=True)
     save_bbox_shp(bbox_df, out_path / "bbox.shp", crs_wkt)
     save_point_shp(points_df, out_path / "points.shp", crs_wkt)
+    save_mask_polygon_shp(polygon_df, out_path / "polygon.shp", crs_wkt)

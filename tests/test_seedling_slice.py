@@ -95,6 +95,7 @@ def test_merge_slice_detections_applies_nms_and_centers() -> None:
     assert merged["boxes_xyxy"].shape == (2, 4)
     assert np.allclose(merged["scores"], np.array([0.9, 0.8]))
     assert merged["points_xy"].shape == (2, 2)
+    assert len(merged["polygons_xy"]) == 2
 
 
 def test_nms_with_ios_suppresses_contained_boxes() -> None:

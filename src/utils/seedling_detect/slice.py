@@ -299,7 +299,7 @@ def merge_slice_detections(
     remove_boundary: bool = True,
     remove_overlay: bool = True,
     border_threshold_px: float = 2.0,
-) -> dict[str, np.ndarray]:
+) -> dict[str, object]:
     """Merge per-slice detection boxes with global NMS.
 
     Parameters
@@ -324,6 +324,7 @@ def merge_slice_detections(
     """
     box_chunks: list[np.ndarray] = []
     score_chunks: list[np.ndarray] = []
+    polygon_chunks: list[np.ndarray] = []
     for result in slice_result_list:
         boxes_geo = np.asarray(result.get("boxes_geo", np.zeros((0, 4))), dtype=float)
         boxes_px = np.asarray(result.get("boxes_px", np.zeros((0, 4))), dtype=float)
@@ -340,14 +341,23 @@ def merge_slice_detections(
             )
         if not np.any(keep_mask):
             continue
-        box_chunks.append(boxes_geo[keep_mask])
-        score_chunks.append(scores[keep_mask])
+        keep_indices = np.where(keep_mask)[0]
+        box_chunks.append(boxes_geo[keep_indices])
+        score_chunks.append(scores[keep_indices])
+        polygons_geo = result.get("polygons_geo", [])
+        for idx in keep_indices:
+            if idx < len(polygons_geo):
+                polygon_xy = np.asarray(polygons_geo[idx], dtype=float)
+                polygon_chunks.append(polygon_xy)
+            else:
+                polygon_chunks.append(_box_to_polygon_xy(boxes_geo[idx]))
     if not box_chunks:
         empty_boxes = np.zeros((0, 4), dtype=float)
         return {
             "boxes_xyxy": empty_boxes,
             "scores": np.zeros((0,), dtype=float),
             "points_xy": np.zeros((0, 2), dtype=float),
+            "polygons_xy": [],
         }
     all_boxes = np.concatenate(box_chunks, axis=0)
     all_scores = np.concatenate(score_chunks, axis=0)
@@ -364,8 +374,25 @@ def merge_slice_detections(
         )
     merged_boxes = all_boxes[keep_indices]
     merged_scores = all_scores[keep_indices]
+    polygons_xy = [polygon_chunks[idx] for idx in keep_indices]
     return {
         "boxes_xyxy": merged_boxes,
         "scores": merged_scores,
         "points_xy": bbox_centers_xyxy(merged_boxes),
+        "polygons_xy": polygons_xy,
     }
+
+
+def _box_to_polygon_xy(box_xyxy: np.ndarray) -> np.ndarray:
+    """Convert one xyxy box to closed polygon coordinates."""
+    x_min, y_min, x_max, y_max = [float(v) for v in box_xyxy]
+    return np.asarray(
+        [
+            [x_min, y_min],
+            [x_max, y_min],
+            [x_max, y_max],
+            [x_min, y_max],
+            [x_min, y_min],
+        ],
+        dtype=float,
+    )

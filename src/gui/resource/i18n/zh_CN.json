@@ -114,8 +114,11 @@
     "page.seedling.msg.boundary_invalid": "边界文件无效",
     "page.seedling.msg.no_merged_results": "请先完成全图推理并生成结果",
     "page.seedling.dialog.save_results": "选择导出目录",
-    "page.seedling.msg.save_results_success": "已导出 bbox.shp 和 points.shp",
+    "page.seedling.msg.save_results_success": "已导出 bbox.shp / polygon.shp / points.shp",
     "page.seedling.btn.save_shp": "保存 SHP",
+    "page.seedling.btn.send_to_next": "send to next =>",
+    "page.seedling.msg.save_first_before_send": "请先保存SHP结果",
+    "page.seedling.msg.sent_to_next": "点结果已发送到 Rename IDs",
 
     "page.rename.group.file": "文件",
     "page.rename.btn.load_dom": "加载影像",
