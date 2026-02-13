@@ -1,5 +1,8 @@
 """Tests for seedling top-tab layout metadata."""
 
+import geopandas as gpd
+from shapely.geometry import Polygon
+
 from src.gui.tabs.seedling_detect import seedling_top_tab_keys
 from src.gui.tabs.seedling_detect import SeedlingTab
 
@@ -38,3 +41,18 @@ def test_start_inference_updates_status_progress() -> None:
     fake_tab = _FakeTab()
     SeedlingTab._on_full_inference_progress(fake_tab, 135)
     assert fake_tab.map_component.status_bar.progress == 100
+
+
+def test_get_boundary_xy_reads_geodataframe_polygon() -> None:
+    """Boundary XY helper should read first geometry from GeoDataFrame."""
+    seedling_tab = SeedlingTab.__new__(SeedlingTab)
+    seedling_tab._boundary_gdf = gpd.GeoDataFrame(
+        {"id": [1]},
+        geometry=[Polygon([(0, 0), (2, 0), (2, 1), (0, 1), (0, 0)])],
+        crs="EPSG:3857",
+    )
+
+    boundary_xy = SeedlingTab._get_boundary_xy(seedling_tab)
+    assert boundary_xy is not None
+    assert boundary_xy[0] == [0.0, 0.0]
+    assert boundary_xy[2] == [2.0, 1.0]

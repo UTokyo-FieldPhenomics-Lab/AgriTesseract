@@ -38,8 +38,9 @@ from qfluentwidgets import (
 )
 
 from src.gui.components.base_interface import TabInterface
+from src.gui.components.map_canvas import LayerBounds
 from src.gui.config import cfg, tr
-from src.utils.subplot_generate.io import load_boundary_roi
+from src.utils.subplot_generate.io import load_boundary_gdf
 from src.utils.seedling_detect.qthread import (
     SeedlingInferenceInput,
     SeedlingInferenceWorker,
@@ -77,7 +78,7 @@ class SeedlingTab(TabInterface):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._dom_path: str = ""
-        self._boundary_roi = None
+        self._boundary_gdf = None
         self._boundary_file_path: str = ""
         self._preview_thread: Optional[QThread] = None
         self._preview_worker: Optional[SeedlingPreviewWorker] = None
@@ -407,17 +408,19 @@ class SeedlingTab(TabInterface):
             self._preview_ctrl.clear_slice_grid_layer()
 
     def _get_boundary_xy(self) -> Optional[list[list[float]]]:
-        """Return boundary coordinates from loaded ROI for filtering."""
-        if self._boundary_roi is None:
+        """Return boundary coordinates from loaded GeoDataFrame for filtering."""
+        if self._boundary_gdf is None:
             return None
-        if len(self._boundary_roi) != 1:
+        if len(self._boundary_gdf) != 1:
             return None
-        coords = next(iter(self._boundary_roi.values()))
-        return coords[:, :2].tolist()
+        geometry = self._boundary_gdf.geometry.iloc[0]
+        if geometry.geom_type == "MultiPolygon":
+            geometry = list(geometry.geoms)[0]
+        return [list(coord[:2]) for coord in geometry.exterior.coords]
 
     def _slice_boundary_mode(self) -> str:
         """Return boundary mode for slice filtering."""
-        if self._boundary_roi is None:
+        if self._boundary_gdf is None:
             return "all"
         return "intersect"
 
@@ -433,7 +436,7 @@ class SeedlingTab(TabInterface):
         if not file_path:
             return
         try:
-            self._boundary_roi = load_boundary_roi(file_path)
+            self._boundary_gdf = load_boundary_gdf(file_path)
         except Exception as exc:
             logger.exception("Failed to load seedling boundary")
             InfoBar.error(
@@ -446,7 +449,7 @@ class SeedlingTab(TabInterface):
         self._boundary_file_path = file_path
         self.label_boundary_path.setText(file_path)
         self.map_component.map_canvas.add_vector_layer(
-            self._boundary_roi,
+            self._boundary_gdf,
             "Boundary",
             color="#FF0000",
             width=2,
@@ -986,17 +989,14 @@ class SeedlingTab(TabInterface):
         )
         scatter_item.setZValue(630)
         map_canvas.add_overlay_item(scatter_item)
-        bounds = map_canvas._calc_bounds_from_roi(
-            {
-                "result_points": np.column_stack(
-                    [points_xy, np.zeros((points_xy.shape[0], 1))]
-                )
-            }
-        )
+        x_min = float(np.min(points_xy[:, 0]))
+        y_min = float(np.min(points_xy[:, 1]))
+        x_max = float(np.max(points_xy[:, 0]))
+        y_max = float(np.max(points_xy[:, 1]))
         map_canvas._layers[layer_name] = {
             "item": scatter_item,
             "visible": True,
-            "bounds": bounds,
+            "bounds": LayerBounds(x_min, y_min, x_max, y_max),
         }
         map_canvas._layer_order.append(layer_name)
         map_canvas.sigLayerAdded.emit(layer_name, "Vector")
