@@ -7,6 +7,7 @@ from src.utils.seedling_detect.preview import (
     pixel_square_bounds_from_geo_center,
     preview_bounds_from_center,
 )
+from src.utils.seedling_detect.preview_controller import result_instance_color
 
 
 def test_clamp_preview_size_limits_range() -> None:
@@ -32,3 +33,13 @@ def test_pixel_square_bounds_from_geo_center_uses_pixel_size() -> None:
         transform=transform,
     )
     assert bounds == (78.0, 158.0, 142.0, 222.0)
+
+
+def test_result_instance_color_is_bright_and_distinct() -> None:
+    """Result polygon colors should be vivid and index-distinct."""
+    color_a = result_instance_color(0)
+    color_b = result_instance_color(1)
+
+    assert color_a.getHsv()[1] >= 200
+    assert color_a.getHsv()[2] >= 220
+    assert color_a.hue() != color_b.hue()

@@ -40,6 +40,7 @@ PREVIEW_LAYER_NAME = "Preview Regions"
 PREVIEW_RESULT_LAYER_NAME = "Preview Result"
 SLICE_GRID_LAYER_NAME = "Slice Grid"
 RESULT_BBOX_LAYER_NAME = "result_bbox"
+RESULT_POLYGON_LAYER_NAME = "result_polygon"
 RESULT_POINTS_LAYER_NAME = "result_points"
 
 
@@ -298,16 +299,19 @@ class SeedlingPreviewController(QObject):
     def show_inference_result_layers(
         self,
         boxes_xyxy: np.ndarray,
+        polygons_xy: list[np.ndarray],
         points_xy: np.ndarray,
     ) -> None:
-        """Render merged full-inference bbox and center-point layers."""
+        """Render merged full-inference bbox/polygon/center-point layers."""
         self.clear_inference_result_layers()
         self._show_result_bbox_layer(boxes_xyxy)
+        self._show_result_polygon_layer(polygons_xy)
         self._show_result_points_layer(points_xy)
 
     def clear_inference_result_layers(self) -> None:
         """Remove full-inference result layers from canvas."""
         self._canvas.remove_layer(RESULT_BBOX_LAYER_NAME)
+        self._canvas.remove_layer(RESULT_POLYGON_LAYER_NAME)
         self._canvas.remove_layer(RESULT_POINTS_LAYER_NAME)
 
     def _show_result_bbox_layer(self, boxes_xyxy: np.ndarray) -> None:
@@ -340,6 +344,24 @@ class SeedlingPreviewController(QObject):
         scatter_item.setZValue(630)
         self._canvas.add_overlay_item(scatter_item)
         self._register_named_layer(RESULT_POINTS_LAYER_NAME, scatter_item, [points])
+
+    def _show_result_polygon_layer(self, polygons_xy: list[np.ndarray]) -> None:
+        """Render SAM3 polygons as colorful result layer."""
+        if not polygons_xy:
+            return
+        group_item = pg.ItemGroup()
+        group_item.setZValue(625)
+        self._canvas.add_overlay_item(group_item)
+        valid_polygons: list[np.ndarray] = []
+        for idx, polygon_xy in enumerate(polygons_xy):
+            poly_xy = np.asarray(polygon_xy, dtype=float)
+            if poly_xy.ndim != 2 or poly_xy.shape[0] < 3:
+                continue
+            self._add_polygon_to_group(group_item, poly_xy, idx)
+            valid_polygons.append(poly_xy)
+        self._register_named_layer(
+            RESULT_POLYGON_LAYER_NAME, group_item, valid_polygons
+        )
 
     def set_slice_grid_visibility(self, visible: bool) -> None:
         """Set visibility for slice grid layer."""
@@ -533,7 +555,7 @@ class SeedlingPreviewController(QObject):
             path.lineTo(float(point_xy[0]), float(point_xy[1]))
         path.closeSubpath()
         graphics_item = QGraphicsPathItem(path)
-        color = QColor.fromHsv((idx * 47) % 360, 220, 255, 130)
+        color = result_instance_color(idx)
         pen = QPen(color, 2)
         pen.setCosmetic(True)
         graphics_item.setPen(pen)
@@ -697,3 +719,9 @@ def _box_to_polygon_xy(box_xyxy: np.ndarray) -> np.ndarray:
         ],
         dtype=float,
     )
+
+
+def result_instance_color(index: int) -> QColor:
+    """Build vivid per-instance color for result polygons."""
+    hue = int((index * 53) % 360)
+    return QColor.fromHsv(hue, 235, 255, 140)
