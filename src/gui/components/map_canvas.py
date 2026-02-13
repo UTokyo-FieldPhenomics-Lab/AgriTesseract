@@ -50,13 +50,13 @@ except ImportError:
     logger.warning("rasterio not installed. GeoTiff loading will be disabled.")
 
 try:
-    import easyidp as idp
+    import geopandas as gpd
 
-    HAS_EASYIDP = True
+    HAS_GEOPANDAS = True
 except ImportError:
-    idp = None
-    HAS_EASYIDP = False
-    logger.warning("easyidp not installed. Vector loading will be disabled.")
+    gpd = None
+    HAS_GEOPANDAS = False
+    logger.warning("geopandas not installed. Vector loading will be disabled.")
 
 
 @dataclass
@@ -245,17 +245,17 @@ class MapCanvas(QWidget):
         self._view_box = CustomViewBox()
         self._view_box.sigClicked.connect(self._on_canvas_clicked)
         self._view_box.sigCoordinateHover.connect(self._on_coordinate_hover)
-        
+
         # Create PlotWidget with custom ViewBox
         self._plot_widget = pg.PlotWidget(viewBox=self._view_box)
         self.setFocusProxy(self._plot_widget)
         self._plot_widget.installEventFilter(self)
         self._plot_widget.viewport().installEventFilter(self)
-        
+
         # Enable custom context menu
         self._plot_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._plot_widget.customContextMenuRequested.connect(self._show_context_menu)
-        
+
         # Background set in _update_theme
         self._plot_widget.setAspectLocked(True)
 
@@ -278,7 +278,7 @@ class MapCanvas(QWidget):
         self._plot_widget.sigRangeChanged.connect(self._on_view_changed)
 
         layout.addWidget(self._plot_widget)
-        
+
         # Create item group for rotation
         self._item_group = pg.ItemGroup()
         self._view_box.addItem(self._item_group)
@@ -290,21 +290,21 @@ class MapCanvas(QWidget):
     def _show_context_menu(self, pos: QPointF):
         """Show custom context menu."""
         menu = QMenu(self)
-        
+
         # Focus Action (Zoom to Boundary & Align)
         action_focus = QAction(tr("Focus"), self)
         # Using a dummy tr key or simple text if tr not ready
-        action_focus.setText("Focus") 
+        action_focus.setText("Focus")
         action_focus.triggered.connect(self._focus_content)
         menu.addAction(action_focus)
-        
+
         # Rotate Action (Set Rotation)
         action_rotate = QAction("Rotate...", self)
         action_rotate.triggered.connect(self._request_rotation)
         menu.addAction(action_rotate)
-        
+
         menu.addSeparator()
-        
+
         # Add "Zoom to Layer" options if layers exist
         if self._layers:
             zoom_menu = menu.addMenu("Zoom to Layer")
@@ -321,7 +321,7 @@ class MapCanvas(QWidget):
         # Calculate bounds of all layers
         if not self._layers:
             return
-            
+
         # Prioritize Boundary
         if "Boundary" in self._layers:
             self.zoom_to_layer("Boundary")
@@ -359,13 +359,12 @@ class MapCanvas(QWidget):
             width = b.right - b.left
             height = b.top - b.bottom
             rect = QRectF(b.left, b.bottom, width, height)
-            
+
             # Apply current rotation to view
             # Standard setRange works on unrotated coords typically in pyqtgraph
-            
+
             self._view_box.setRange(rect, padding=0.05)
             logger.debug(f"Zoomed to layer: {layer_name}")
-
 
     def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:
         """
@@ -442,40 +441,36 @@ class MapCanvas(QWidget):
             logger.error(f"Failed to load GeoTiff: {e}")
             return False
 
-    def _normalize_to_roi(self, data: Any) -> Optional[Any]:
-        """Normalize vector input to ``idp.ROI``.
+    def _normalize_to_gdf(self, data: Any) -> Optional[Any]:
+        """Normalize vector input to ``GeoDataFrame``.
 
         Parameters
         ----------
         data : Any
-            Vector source as ROI object or shapefile path.
+            Vector source as GeoDataFrame or shapefile path.
 
         Returns
         -------
-        idp.ROI | None
-            Parsed ROI object when successful.
+        geopandas.GeoDataFrame | None
+            Parsed GeoDataFrame when successful.
         """
-        if not HAS_EASYIDP:
-            logger.error("easyidp not installed")
-            return None
-        roi_cls = getattr(idp, "ROI", None)
-        if roi_cls is None:
-            logger.error("easyidp ROI class not available")
+        if not HAS_GEOPANDAS:
+            logger.error("geopandas not installed")
             return None
         if isinstance(data, (str, Path)):
-            return roi_cls(str(data))
-        if isinstance(data, roi_cls):
+            return gpd.read_file(Path(data))
+        if isinstance(data, gpd.GeoDataFrame):
             return data
         logger.error(f"Invalid vector data type: {type(data)}")
         return None
 
-    def _roi_to_plot_arrays(self, roi_data: Any) -> Tuple[np.ndarray, np.ndarray]:
-        """Convert ROI polygons into flattened plotting arrays.
+    def _gdf_to_plot_arrays(self, vector_gdf: Any) -> Tuple[np.ndarray, np.ndarray]:
+        """Convert polygon geometries into flattened plotting arrays.
 
         Parameters
         ----------
-        roi_data : idp.ROI
-            ROI where each item is ndarray with shape ``(N, 2+)``.
+        vector_gdf : geopandas.GeoDataFrame
+            GeoDataFrame with polygon or multipolygon geometry.
 
         Returns
         -------
@@ -484,49 +479,50 @@ class MapCanvas(QWidget):
         """
         x_values: List[float] = []
         y_values: List[float] = []
-        for coords_raw in roi_data.values():
-            coords_xy = np.asarray(coords_raw)
-            if coords_xy.ndim != 2 or coords_xy.shape[0] < 3:
-                continue
-            x_values.extend(coords_xy[:, 0].tolist())
-            y_values.extend(coords_xy[:, 1].tolist())
-            x_values.append(np.nan)
-            y_values.append(np.nan)
+        for geom in vector_gdf.geometry:
+            polygons = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+            for polygon in polygons:
+                coords_xy = np.asarray(polygon.exterior.coords)
+                if coords_xy.ndim != 2 or coords_xy.shape[0] < 3:
+                    continue
+                x_values.extend(coords_xy[:, 0].tolist())
+                y_values.extend(coords_xy[:, 1].tolist())
+                x_values.append(np.nan)
+                y_values.append(np.nan)
         return np.asarray(x_values, dtype=float), np.asarray(y_values, dtype=float)
 
-    def _calc_bounds_from_roi(self, roi_data: Any) -> Optional[LayerBounds]:
-        """Calculate layer bounds from ROI coordinates.
+    def _calc_bounds_from_gdf(self, vector_gdf: Any) -> Optional[LayerBounds]:
+        """Calculate layer bounds from GeoDataFrame coordinates.
 
         Parameters
         ----------
-        roi_data : idp.ROI
-            ROI polygon container.
+        vector_gdf : geopandas.GeoDataFrame
+            Polygon GeoDataFrame.
 
         Returns
         -------
         LayerBounds | None
-            Computed bounds or None when ROI is empty.
+            Computed bounds or None when geometry is empty.
         """
-        if len(roi_data) == 0:
+        if len(vector_gdf) == 0:
             return None
-        all_coords = [np.asarray(coords)[:, :2] for coords in roi_data.values()]
-        stacked = np.vstack(all_coords)
+        left, bottom, right, top = vector_gdf.total_bounds
         return LayerBounds(
-            left=float(np.min(stacked[:, 0])),
-            bottom=float(np.min(stacked[:, 1])),
-            right=float(np.max(stacked[:, 0])),
-            top=float(np.max(stacked[:, 1])),
+            left=float(left),
+            bottom=float(bottom),
+            right=float(right),
+            top=float(top),
         )
 
     def add_vector_layer(
         self, data: Any, layer_name: str, color: str = "g", width: int = 2
     ) -> bool:
-        """Add vector layer from ROI or shapefile path.
+        """Add vector layer from GeoDataFrame or shapefile path.
 
         Parameters
         ----------
         data : Any
-            ``idp.ROI`` object or path to shapefile.
+            ``GeoDataFrame`` object or path to shapefile.
         layer_name : str
             Layer name shown in layer panel.
         color : str, optional
@@ -540,16 +536,16 @@ class MapCanvas(QWidget):
             True when layer is loaded successfully.
         """
         try:
-            roi_data = self._normalize_to_roi(data)
-            if roi_data is None:
+            vector_gdf = self._normalize_to_gdf(data)
+            if vector_gdf is None:
                 return False
 
-            x_data, y_data = self._roi_to_plot_arrays(roi_data)
+            x_data, y_data = self._gdf_to_plot_arrays(vector_gdf)
             if x_data.size == 0:
                 logger.warning("No vector geometry to draw")
                 return False
 
-            bounds = self._calc_bounds_from_roi(roi_data)
+            bounds = self._calc_bounds_from_gdf(vector_gdf)
             if bounds is None:
                 return False
 
@@ -566,7 +562,7 @@ class MapCanvas(QWidget):
 
             self._layers[layer_name] = {
                 "item": curve,
-                "data": roi_data,
+                "data": vector_gdf,
                 "visible": True,
                 "bounds": bounds,
             }
@@ -937,9 +933,7 @@ class MapCanvas(QWidget):
             if handler(item_pos.x(), item_pos.y(), ev.button()):
                 return
         self.sigLayerClicked.emit("", item_pos.x(), item_pos.y())
-        logger.debug(
-            f"Canvas clicked at: ({item_pos.x():.2f}, {item_pos.y():.2f})"
-        )
+        logger.debug(f"Canvas clicked at: ({item_pos.x():.2f}, {item_pos.y():.2f})")
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Delegate key events to registered handlers, then super.
@@ -956,13 +950,17 @@ class MapCanvas(QWidget):
 
     def eventFilter(self, watched: Any, event: QEvent) -> bool:
         """Filter events for child widgets (PlotWidget)."""
-        if (watched == self._plot_widget or watched == self._plot_widget.viewport()) and event.type() == QEvent.Type.KeyPress:
+        if (
+            watched == self._plot_widget or watched == self._plot_widget.viewport()
+        ) and event.type() == QEvent.Type.KeyPress:
             logger.debug(f"MapCanvas eventFilter caught KeyPress: {event.key()}")
             # Delegate to registered handlers first
             for handler in self._key_handlers:
                 # cast event to QKeyEvent if needed, or rely on duck typing
                 if handler(event):
-                    logger.debug(f"Key event {event.key()} consumed by handler: {handler}")
+                    logger.debug(
+                        f"Key event {event.key()} consumed by handler: {handler}"
+                    )
                     return True
         return super().eventFilter(watched, event)
 
@@ -1034,4 +1032,3 @@ class MapCanvas(QWidget):
 
         self._plot_widget.setBackground(bg_color)
         logger.debug(f"MapCanvas theme updated. Dark: {is_dark}")
-
