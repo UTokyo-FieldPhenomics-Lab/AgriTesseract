@@ -564,16 +564,12 @@ class SubplotTab(TabInterface):
         if not file_path:
             return
 
-        self.map_component.status_bar.set_progress(None)  # Busy
-        # self.map_component.status_bar.set_status('info', "Generating...")
-
         try:
             params = self._collect_params()
             generate_and_save_gdf(self.boundary_gdf, output_path=file_path, **params)
             InfoBar.success(
                 title=tr("success"), content=tr("page.subplot.msg.success"), parent=self
             )
-            self.map_component.status_bar.set_status("success", tr("success"))
         except Exception as exc:  # pragma: no cover - UI feedback branch
             logger.exception("Subplot save failed")
             InfoBar.error(

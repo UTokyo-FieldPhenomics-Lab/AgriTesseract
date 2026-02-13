@@ -1,14 +1,20 @@
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
-from PySide6.QtCore import Signal, Qt
-from qfluentwidgets import DoubleSpinBox, BodyLabel, InfoBadge, ProgressBar, IndeterminateProgressBar
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QWidget
+from qfluentwidgets import (
+    BodyLabel,
+    DoubleSpinBox,
+    IndeterminateProgressBar,
+    ProgressBar,
+)
 
 from src.gui.config import tr
+
 
 class StatusBar(QFrame):
     """
     Custom Status Bar with Coordinate display and interactive Zoom/Rotation controls.
     """
-    
+
     sigZoomChanged = Signal(float)
     sigRotationChanged = Signal(float)
 
@@ -18,9 +24,9 @@ class StatusBar(QFrame):
         self._connect_signals()
 
     def _init_ui(self):
-        self.setObjectName('statusBar')
+        self.setObjectName("statusBar")
         self.setFixedHeight(40)
-        
+
         # Main layout
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -30,11 +36,11 @@ class StatusBar(QFrame):
         self.coord_container = QWidget()
         coord_layout = QHBoxLayout(self.coord_container)
         coord_layout.setContentsMargins(16, 0, 16, 0)
-        
+
         self.coord_label = BodyLabel(tr("status.coord").format(x=0.0, y=0.0))
         coord_layout.addWidget(self.coord_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        layout.addWidget(self.coord_container, 1) # Ratio 1
+
+        layout.addWidget(self.coord_container, 1)  # Ratio 1
 
         # Separator 1
         layout.addWidget(self._create_separator())
@@ -44,24 +50,24 @@ class StatusBar(QFrame):
         zoom_layout = QHBoxLayout(self.zoom_container)
         zoom_layout.setContentsMargins(16, 0, 16, 0)
         zoom_layout.setSpacing(10)
-        
+
         # Label outside
-        self.zoom_label = BodyLabel(tr("status.zoom_prefix").strip()) 
-        
+        self.zoom_label = BodyLabel(tr("status.zoom_prefix").strip())
+
         self.zoom_sb = DoubleSpinBox()
         self.zoom_sb.setRange(1, 50000)
         self.zoom_sb.setSuffix("%")
         # Ensure no prefix in the box itself
-        self.zoom_sb.setPrefix("") 
+        self.zoom_sb.setPrefix("")
         self.zoom_sb.setValue(100)
         self.zoom_sb.setSingleStep(10)
         self.zoom_sb.setDecimals(0)
-        
+
         # Layout
         zoom_layout.addWidget(self.zoom_label)
-        zoom_layout.addWidget(self.zoom_sb, 1) # Expand to fill
-        
-        layout.addWidget(self.zoom_container, 1) # Ratio 1
+        zoom_layout.addWidget(self.zoom_sb, 1)  # Expand to fill
+
+        layout.addWidget(self.zoom_container, 1)  # Ratio 1
 
         # Separator 2
         layout.addWidget(self._create_separator())
@@ -71,26 +77,26 @@ class StatusBar(QFrame):
         rot_layout = QHBoxLayout(self.rotation_container)
         rot_layout.setContentsMargins(16, 0, 16, 0)
         rot_layout.setSpacing(10)
-        
+
         self.rotation_label = BodyLabel(tr("status.rotation_prefix").strip())
-        
+
         self.rotation_sb = DoubleSpinBox()
-        self.rotation_sb.setRange(-360, 360) 
+        self.rotation_sb.setRange(-360, 360)
         self.rotation_sb.setSuffix("°")
         self.rotation_sb.setPrefix("")
         self.rotation_sb.setValue(0.00)
         self.rotation_sb.setSingleStep(1.0)
         self.rotation_sb.setDecimals(2)
-        
+
         # Layout
         rot_layout.addWidget(self.rotation_label)
-        rot_layout.addWidget(self.rotation_sb, 1) # Expand to fill
-        
-        layout.addWidget(self.rotation_container, 0) # Fixed size
-        
+        rot_layout.addWidget(self.rotation_sb, 1)  # Expand to fill
+
+        layout.addWidget(self.rotation_container, 0)  # Fixed size
+
         # Spacer to push status to right
         # layout.addStretch(1)
-        
+
         # --- Section 4: Status Indicators ---
         self._init_status_indicators(layout)
 
@@ -100,7 +106,9 @@ class StatusBar(QFrame):
         line.setFrameShadow(QFrame.Shadow.Sunken)
         line.setLineWidth(1)
         line.setMidLineWidth(0)
-        line.setStyleSheet("QFrame { border: none; background-color: #E5E5E5; max-width: 1px; }") 
+        line.setStyleSheet(
+            "QFrame { border: none; background-color: #E5E5E5; max-width: 1px; }"
+        )
         # Note: Colors should dynamic in real app, but this mimics simple separator
         line.setFixedHeight(24)
         return line
@@ -163,10 +171,12 @@ class StatusBar(QFrame):
         status_layout.addWidget(self.busy_bar)
 
         layout.addWidget(self.status_container)
-        layout.addStretch(1) # Stretch to keep status on left/center-left or let it push? 
+        layout.addStretch(
+            1
+        )  # Stretch to keep status on left/center-left or let it push?
         # Actually user requirement: "at the last side" (right side).
         # So we should add stretch before this container if we want it on the right.
-        
+
     def _rebuild_layout_for_status(self):
         """Rebuild layout to place coordinates left, zoom/rot center, status right."""
         # Current layout in _init_ui is adding items sequentially.
@@ -177,7 +187,7 @@ class StatusBar(QFrame):
     def set_status(self, mode: str, message: str) -> None:
         """
         Set status message and badge.
-        
+
         Parameters
         ----------
         mode : str
@@ -185,34 +195,17 @@ class StatusBar(QFrame):
         message : str
              Status message text
         """
-        # Clear previous
-        self.clear_message()
-        
-        badge = None
-        if mode == 'success':
-            badge = InfoBadge.success(message)
-        elif mode == 'warning':
-            badge = InfoBadge.warning(message)
-        elif mode == 'error':
-            badge = InfoBadge.error(message)
-        elif mode == 'info':
-            badge = InfoBadge.info(message)
-        elif mode == 'custom':
-            badge = InfoBadge.custom(message, '#005fb8', '#60cdff')
-        else:
-            badge = BodyLabel(message)
-            
-        if badge:
-            self.message_layout.addWidget(badge)
-            
+        _ = (mode, message)
+        return
+
     def set_progress(self, value: int = None) -> None:
         """
         Set progress bar state.
-        
+
         Parameters
         ----------
         value : int, optional
-            0-100 for determinate progress. 
+            0-100 for determinate progress.
             None for indeterminate (busy) state.
             -1 to hide progress bars.
         """
@@ -249,4 +242,3 @@ class StatusBar(QFrame):
         """Clear all status content."""
         self.clear_message()
         self.clear_progress()
-
