@@ -23,6 +23,7 @@ from qfluentwidgets import (
     SegmentedWidget,
     CommandBar,
     PushButton,
+    ToggleButton,
     PrimaryPushButton,
     ComboBox,
     SpinBox,
@@ -271,11 +272,11 @@ class RenameTab(TabInterface):
             self._on_direction_source_changed
         )
 
-        self.btn_set_ridge_direction = PushButton(
+        self.btn_set_ridge_direction = ToggleButton(
             tr("page.rename.btn.set_ridge_direction")
         )
-        self.btn_set_ridge_direction.clicked.connect(
-            self._on_set_ridge_direction_clicked
+        self.btn_set_ridge_direction.toggled.connect(
+            self._on_set_ridge_direction_toggled
         )
         self.btn_focus_ridge = PushButton(tr("page.rename.btn.focus_ridge"))
         self.btn_focus_ridge.clicked.connect(self._on_focus_ridge_clicked)
@@ -315,9 +316,15 @@ class RenameTab(TabInterface):
         layout.addWidget(bar)
         return tab
 
-    def _on_set_ridge_direction_clicked(self) -> None:
-        """Switch direction source to manual draw when set button is clicked."""
-        self.combo_direction.setCurrentIndex(self._manual_direction_index())
+    def _on_set_ridge_direction_toggled(self, checked: bool) -> None:
+        """Toggle manual draw mode via accent toggle button state."""
+        if not checked:
+            if self._manual_draw_active:
+                self._deactivate_manual_draw_mode(clear_vector=False)
+            return
+        if self._current_direction_source() != "manual_draw":
+            self.combo_direction.setCurrentIndex(self._manual_direction_index())
+            return
         self._activate_manual_draw_mode()
 
     def _manual_direction_index(self) -> int:
@@ -400,9 +407,12 @@ class RenameTab(TabInterface):
         source_key = self._current_direction_source()
         if source_key == "manual_draw":
             self._reset_manual_draw_state(clear_layer=True)
-            self._activate_manual_draw_mode()
+            if self.btn_set_ridge_direction.isChecked():
+                self._activate_manual_draw_mode()
             self._schedule_update("ridge")
             return
+        if self.btn_set_ridge_direction.isChecked():
+            self.btn_set_ridge_direction.setChecked(False)
         if self._manual_draw_active:
             self._deactivate_manual_draw_mode(clear_vector=True)
         self._sync_boundary_direction_layer(source_key)
@@ -594,6 +604,7 @@ class RenameTab(TabInterface):
         self._manual_direction_vector_array = vector_array
         self._set_ridge_direction_state(vector_array, "manual_draw")
         self._draw_manual_fixed_line()
+        self.btn_set_ridge_direction.setChecked(False)
         if self._ask_apply_rotation():
             self._apply_saved_rotation()
         self._schedule_update("ridge")

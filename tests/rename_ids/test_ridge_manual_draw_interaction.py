@@ -74,7 +74,9 @@ def test_manual_draw_clicks_build_direction_vector(qtbot) -> None:
     """Two left clicks in manual mode should produce one unit direction vector."""
     tab = RenameTab()
     qtbot.addWidget(tab)
-    tab._activate_manual_draw_mode()
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab.combo_direction.setCurrentIndex(4)
+    tab.btn_set_ridge_direction.click()
     tab._on_ridge_manual_click(10.0, 20.0, Qt.MouseButton.LeftButton)
     tab._on_ridge_manual_hover(13.0, 24.0)
     consumed = tab._on_ridge_manual_click(13.0, 24.0, Qt.MouseButton.LeftButton)
@@ -84,21 +86,41 @@ def test_manual_draw_clicks_build_direction_vector(qtbot) -> None:
     assert np.allclose(tab._manual_direction_vector_array, np.asarray([0.6, 0.8]))
     assert tab._manual_fixed_arrow_item is None
     assert "ridge_direction" in tab.map_component.map_canvas._layers
+    assert tab.btn_set_ridge_direction.isChecked() is False
+    assert tab._manual_draw_active is False
 
 
 def test_manual_draw_repeated_definition_overwrites_vector(qtbot) -> None:
     """A second two-click sequence should overwrite previous manual vector."""
     tab = RenameTab()
     qtbot.addWidget(tab)
-    tab._activate_manual_draw_mode()
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab.combo_direction.setCurrentIndex(4)
+    tab.btn_set_ridge_direction.click()
     tab._on_ridge_manual_click(0.0, 0.0, Qt.MouseButton.LeftButton)
     tab._on_ridge_manual_click(0.0, 2.0, Qt.MouseButton.LeftButton)
     first_vec = tab._manual_direction_vector_array.copy()
+    tab.btn_set_ridge_direction.click()
     tab._on_ridge_manual_click(0.0, 0.0, Qt.MouseButton.LeftButton)
     tab._on_ridge_manual_click(2.0, 0.0, Qt.MouseButton.LeftButton)
     second_vec = tab._manual_direction_vector_array
     assert np.allclose(first_vec, np.asarray([0.0, 1.0]))
     assert np.allclose(second_vec, np.asarray([1.0, 0.0]))
+
+
+def test_manual_draw_can_reactivate_after_confirmed_vector(qtbot) -> None:
+    """Set-ridge toggle should reactivate manual draw after one completed vector."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab.combo_direction.setCurrentIndex(4)
+    tab.btn_set_ridge_direction.click()
+    tab._on_ridge_manual_click(0.0, 0.0, Qt.MouseButton.LeftButton)
+    tab._on_ridge_manual_click(1.0, 0.0, Qt.MouseButton.LeftButton)
+    assert tab._manual_draw_active is False
+    tab.btn_set_ridge_direction.click()
+    assert tab.btn_set_ridge_direction.isChecked() is True
+    assert tab._manual_draw_active is True
 
 
 def test_switch_manual_to_boundary_clears_manual_state(qtbot) -> None:
