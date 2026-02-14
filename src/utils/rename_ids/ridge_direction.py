@@ -131,13 +131,12 @@ def compute_rotation_angle_deg(direction_vector: np.ndarray) -> float:
     Returns
     -------
     float
-        Rotation angle in degrees. Positive means clockwise display alignment
-        under current map canvas rotation convention.
+        Rotation angle in degrees compatible with ``MapCanvas.set_rotation``.
 
     Examples
     --------
     >>> compute_rotation_angle_deg(np.asarray([1.0, 0.0]))
-    90.0
+    -90.0
     """
     unit_vec = normalize_direction_vector(direction_vector)
-    return float(math.degrees(math.atan2(unit_vec[0], unit_vec[1])))
+    return float(-math.degrees(math.atan2(unit_vec[0], unit_vec[1])))

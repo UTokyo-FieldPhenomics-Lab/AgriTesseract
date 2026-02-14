@@ -48,7 +48,7 @@ def test_compute_rotation_angle_deg_aligns_to_positive_y() -> None:
     ) == pytest.approx(0.0)
     assert compute_rotation_angle_deg(
         np.asarray([1.0, 0.0], dtype=np.float64)
-    ) == pytest.approx(90.0)
+    ) == pytest.approx(-90.0)
     assert compute_rotation_angle_deg(
         np.asarray([-1.0, 0.0], dtype=np.float64)
-    ) == pytest.approx(-90.0)
+    ) == pytest.approx(90.0)
