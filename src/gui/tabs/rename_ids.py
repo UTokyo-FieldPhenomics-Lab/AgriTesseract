@@ -107,6 +107,7 @@ class RenameTab(TabInterface):
         self._ridge_direction_vector_array: np.ndarray | None = None
         self._ridge_rotation_angle_deg: float | None = None
         self._ridge_direction_source: str | None = None
+        self._suspend_layer_remove_sync: bool = False
 
         # Debounce timer for reactive updates
         self._update_timer = QTimer(self)
@@ -148,6 +149,9 @@ class RenameTab(TabInterface):
             # Fallback if _tool_layout is not directly available (though it should be)
             layout = QVBoxLayout(self)
             layout.addWidget(top_tabs_widget)
+        self.map_component.map_canvas.sigLayerRemoved.connect(
+            self._on_canvas_layer_removed
+        )
 
         # We don't use property_panel here based on the requirement to duplicate seedling_detect structure?
         # distinct structure.
@@ -392,6 +396,49 @@ class RenameTab(TabInterface):
         self.spin_distance.setEnabled(enabled)
         self.spin_height.setEnabled(enabled)
 
+    def _remove_map_layer_with_sync_guard(self, layer_name: str) -> None:
+        """Remove map layer while suppressing removal sync side effects."""
+        self._suspend_layer_remove_sync = True
+        try:
+            self.map_component.map_canvas.remove_layer(layer_name)
+        finally:
+            self._suspend_layer_remove_sync = False
+
+    @Slot(str)
+    def _on_canvas_layer_removed(self, layer_name: str) -> None:
+        """Sync input and ridge UI state when user deletes key layers."""
+        if self._suspend_layer_remove_sync:
+            return
+        if self._input_bundle is None:
+            return
+        if layer_name == "Boundary":
+            self._input_bundle["boundary_gdf"] = None
+            self._input_bundle["boundary_axes"] = None
+            points_gdf = self._input_bundle.get("points_gdf")
+            if isinstance(points_gdf, gpd.GeoDataFrame):
+                self._input_bundle["effective_mask"] = np.ones(
+                    len(points_gdf), dtype=np.bool_
+                )
+            if self._ridge_direction_source and self._ridge_direction_source.startswith(
+                "boundary_"
+            ):
+                self._ridge_direction_source = None
+                self._ridge_direction_vector_array = None
+                self._ridge_rotation_angle_deg = None
+                self._remove_map_layer_with_sync_guard("ridge_direction")
+            self._refresh_ridge_ui_state()
+            return
+        if layer_name != "rename_points":
+            return
+        self._input_bundle = None
+        self._current_points_source = ""
+        self._ridge_direction_source = None
+        self._ridge_direction_vector_array = None
+        self._ridge_rotation_angle_deg = None
+        if self._manual_draw_active:
+            self._deactivate_manual_draw_mode(clear_vector=True)
+        self._refresh_ridge_ui_state()
+
     def _refresh_ridge_ui_state(self) -> None:
         """Refresh ridge tab source options and enabled state."""
         has_points = self._has_points_input()
@@ -492,7 +539,7 @@ class RenameTab(TabInterface):
             self._manual_start_point_array = None
             self._manual_end_point_array = None
             self._manual_direction_vector_array = None
-            self.map_component.map_canvas.remove_layer("ridge_direction")
+            self._remove_map_layer_with_sync_guard("ridge_direction")
 
     def _register_manual_draw_handlers(self) -> None:
         """Register map canvas handlers for manual draw mode."""
@@ -530,7 +577,7 @@ class RenameTab(TabInterface):
         self._remove_manual_overlay_items()
         if not clear_layer:
             return
-        self.map_component.map_canvas.remove_layer("ridge_direction")
+        self._remove_map_layer_with_sync_guard("ridge_direction")
         if self._ridge_direction_source != "manual_draw":
             return
         self._ridge_direction_vector_array = None
@@ -731,7 +778,7 @@ class RenameTab(TabInterface):
         try:
             start_pt, end_pt = self._compute_boundary_direction_segment(source_key)
         except Exception:
-            self.map_component.map_canvas.remove_layer("ridge_direction")
+            self._remove_map_layer_with_sync_guard("ridge_direction")
             return
         self._set_ridge_direction_state(end_pt - start_pt, source_key)
         crs_value = None
@@ -957,7 +1004,7 @@ class RenameTab(TabInterface):
             return
         layer_name = "rename_points"
         map_canvas = self.map_component.map_canvas
-        map_canvas.remove_layer(layer_name)
+        self._remove_map_layer_with_sync_guard(layer_name)
         scatter_item = pg.ScatterPlotItem(
             x=xy_array[:, 0],
             y=xy_array[:, 1],
