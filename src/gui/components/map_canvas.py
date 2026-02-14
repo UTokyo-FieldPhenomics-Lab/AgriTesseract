@@ -455,12 +455,12 @@ class MapCanvas(QWidget):
         return None
 
     def _gdf_to_plot_arrays(self, vector_gdf: Any) -> Tuple[np.ndarray, np.ndarray]:
-        """Convert polygon geometries into flattened plotting arrays.
+        """Convert vector geometries into flattened plotting arrays.
 
         Parameters
         ----------
         vector_gdf : geopandas.GeoDataFrame
-            GeoDataFrame with polygon or multipolygon geometry.
+            GeoDataFrame with polygon/line geometries.
 
         Returns
         -------
@@ -470,15 +470,33 @@ class MapCanvas(QWidget):
         x_values: List[float] = []
         y_values: List[float] = []
         for geom in vector_gdf.geometry:
-            polygons = [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
-            for polygon in polygons:
-                coords_xy = np.asarray(polygon.exterior.coords)
-                if coords_xy.ndim != 2 or coords_xy.shape[0] < 3:
-                    continue
-                x_values.extend(coords_xy[:, 0].tolist())
-                y_values.extend(coords_xy[:, 1].tolist())
-                x_values.append(np.nan)
-                y_values.append(np.nan)
+            if geom is None or geom.is_empty:
+                continue
+            if geom.geom_type in {"Polygon", "MultiPolygon"}:
+                polygon_list = (
+                    [geom] if geom.geom_type == "Polygon" else list(geom.geoms)
+                )
+                for polygon in polygon_list:
+                    coords_xy = np.asarray(polygon.exterior.coords)
+                    if coords_xy.ndim != 2 or coords_xy.shape[0] < 3:
+                        continue
+                    x_values.extend(coords_xy[:, 0].tolist())
+                    y_values.extend(coords_xy[:, 1].tolist())
+                    x_values.append(np.nan)
+                    y_values.append(np.nan)
+                continue
+            if geom.geom_type in {"LineString", "LinearRing", "MultiLineString"}:
+                line_list = (
+                    [geom] if geom.geom_type != "MultiLineString" else list(geom.geoms)
+                )
+                for line in line_list:
+                    coords_xy = np.asarray(line.coords)
+                    if coords_xy.ndim != 2 or coords_xy.shape[0] < 2:
+                        continue
+                    x_values.extend(coords_xy[:, 0].tolist())
+                    y_values.extend(coords_xy[:, 1].tolist())
+                    x_values.append(np.nan)
+                    y_values.append(np.nan)
         return np.asarray(x_values, dtype=float), np.asarray(y_values, dtype=float)
 
     def _calc_bounds_from_gdf(self, vector_gdf: Any) -> Optional[LayerBounds]:

@@ -2,8 +2,45 @@
 
 import numpy as np
 from PySide6.QtCore import Qt
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 from src.gui.tabs.rename_ids import RenameTab
+
+
+def _build_boundary_bundle() -> dict:
+    """Build input bundle with boundary and effective mask."""
+    points_gdf = gpd.GeoDataFrame(
+        {"fid": [1, 2, 3, 4]},
+        geometry=[
+            Point(0.0, 0.0),
+            Point(2.0, 0.0),
+            Point(2.0, 2.0),
+            Point(6.0, 6.0),
+        ],
+        crs="EPSG:4326",
+    )
+    boundary_gdf = gpd.GeoDataFrame(
+        {"name": ["b"]},
+        geometry=[Polygon([(-1, -1), (3, -1), (3, 3), (-1, -1)])],
+        crs="EPSG:4326",
+    )
+    return {
+        "points_gdf": points_gdf,
+        "points_meta": {
+            "source": "file",
+            "id_field": "fid",
+            "crs_wkt": "EPSG:4326",
+            "source_tag": "test",
+        },
+        "boundary_gdf": boundary_gdf,
+        "boundary_axes": {
+            "x_axis": np.asarray([1.0, 0.0], dtype=np.float64),
+            "y_axis": np.asarray([0.0, 1.0], dtype=np.float64),
+        },
+        "effective_mask": np.asarray([True, True, True, False], dtype=np.bool_),
+        "dom_layers": [],
+    }
 
 
 def test_manual_draw_clicks_build_direction_vector(qtbot) -> None:
@@ -18,6 +55,8 @@ def test_manual_draw_clicks_build_direction_vector(qtbot) -> None:
     assert tab._manual_start_point_array is not None
     assert tab._manual_end_point_array is not None
     assert np.allclose(tab._manual_direction_vector_array, np.asarray([0.6, 0.8]))
+    assert tab._manual_fixed_arrow_item is None
+    assert "ridge_direction" in tab.map_component.map_canvas._layers
 
 
 def test_manual_draw_repeated_definition_overwrites_vector(qtbot) -> None:
@@ -39,6 +78,7 @@ def test_switch_manual_to_boundary_clears_manual_state(qtbot) -> None:
     """Switching source from manual draw to boundary should clear manual state."""
     tab = RenameTab()
     qtbot.addWidget(tab)
+    tab._set_direction_source_options(has_boundary=True)
     tab.combo_direction.setCurrentIndex(4)
     tab._activate_manual_draw_mode()
     tab._on_ridge_manual_click(1.0, 1.0, Qt.MouseButton.LeftButton)
@@ -48,4 +88,29 @@ def test_switch_manual_to_boundary_clears_manual_state(qtbot) -> None:
     assert tab._manual_end_point_array is None
     assert tab._manual_direction_vector_array is None
     assert tab._manual_preview_line_item is None
-    assert tab._manual_fixed_line_item is None
+    assert tab._manual_fixed_arrow_item is None
+
+
+def test_boundary_source_builds_ridge_direction_multiline_layer(qtbot) -> None:
+    """Selecting boundary source should build ridge_direction multiline layer."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab.combo_direction.setCurrentIndex(0)
+    ridge_layer = tab.map_component.map_canvas._layers.get("ridge_direction")
+    assert ridge_layer is not None
+    ridge_gdf = ridge_layer["data"]
+    geom = ridge_gdf.geometry.iloc[0]
+    assert geom.geom_type == "MultiLineString"
+    assert len(geom.geoms) == 3
+
+
+def test_switch_boundary_to_manual_removes_boundary_ridge_layer(qtbot) -> None:
+    """Switching from boundary source to manual should clear old ridge layer."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab.combo_direction.setCurrentIndex(0)
+    assert "ridge_direction" in tab.map_component.map_canvas._layers
+    tab.combo_direction.setCurrentIndex(4)
+    assert "ridge_direction" not in tab.map_component.map_canvas._layers

@@ -8,6 +8,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pyqtgraph as pg
+from shapely.geometry import LineString, MultiLineString, MultiPoint
 
 from PySide6.QtCore import Qt, Slot, Signal, QTimer
 from PySide6.QtWidgets import (
@@ -42,7 +43,10 @@ from src.utils.rename_ids.boundary import (
     compute_boundary_axes,
 )
 from src.utils.rename_ids.io import load_points_data, normalize_input_points
-from src.utils.rename_ids.ridge_direction import normalize_direction_vector
+from src.utils.rename_ids.ridge_direction import (
+    normalize_direction_vector,
+    resolve_direction_vector,
+)
 
 
 def rename_top_tab_keys() -> tuple[str, ...]:
@@ -76,6 +80,13 @@ class RenameTab(TabInterface):
         "boundary_-y",
         "manual_draw",
     ]
+    DIRECTION_LABEL_KEY_MAP = {
+        "boundary_x": "page.rename.combo.boundary_x",
+        "boundary_y": "page.rename.combo.boundary_y",
+        "boundary_-x": "page.rename.combo.boundary_neg_x",
+        "boundary_-y": "page.rename.combo.boundary_neg_y",
+        "manual_draw": "page.rename.combo.manual_draw",
+    }
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -88,8 +99,9 @@ class RenameTab(TabInterface):
         self._manual_end_point_array: np.ndarray | None = None
         self._manual_direction_vector_array: np.ndarray | None = None
         self._manual_preview_line_item: pg.PlotCurveItem | None = None
-        self._manual_fixed_line_item: pg.PlotCurveItem | None = None
+        self._manual_fixed_arrow_item: pg.ArrowItem | None = None
         self._manual_handlers_registered: bool = False
+        self._active_direction_source_list: list[str] = ["manual_draw"]
 
         # Debounce timer for reactive updates
         self._update_timer = QTimer(self)
@@ -101,6 +113,7 @@ class RenameTab(TabInterface):
         self._pending_update_type: Optional[str] = None
 
         self._init_controls()
+        self._refresh_ridge_ui_state()
 
     def _init_controls(self) -> None:
         """Initialize the controls for seedling renaming."""
@@ -249,15 +262,7 @@ class RenameTab(TabInterface):
         bar = self._new_command_bar()
 
         self.combo_direction = ComboBox()
-        self.combo_direction.addItems(
-            [
-                tr("page.rename.combo.boundary_x"),
-                tr("page.rename.combo.boundary_y"),
-                tr("page.rename.combo.boundary_neg_x"),
-                tr("page.rename.combo.boundary_neg_y"),
-                tr("page.rename.combo.manual_draw"),
-            ]
-        )
+        self._set_direction_source_options(has_boundary=False)
         self.combo_direction.currentIndexChanged.connect(
             self._on_direction_source_changed
         )
@@ -312,24 +317,90 @@ class RenameTab(TabInterface):
 
     def _manual_direction_index(self) -> int:
         """Return combo index of manual draw source."""
-        return self.RIDGE_DIRECTION_SOURCE_LIST.index("manual_draw")
+        return self._active_direction_source_list.index("manual_draw")
 
     def _current_direction_source(self) -> str:
         """Return current ridge direction source key."""
         index_value = self.combo_direction.currentIndex()
-        if index_value < 0 or index_value >= len(self.RIDGE_DIRECTION_SOURCE_LIST):
+        if index_value < 0 or index_value >= len(self._active_direction_source_list):
             return "manual_draw"
-        return self.RIDGE_DIRECTION_SOURCE_LIST[index_value]
+        return self._active_direction_source_list[index_value]
+
+    def _set_direction_source_options(self, has_boundary: bool) -> None:
+        """Set direction source options by boundary availability."""
+        target_source_list = ["manual_draw"]
+        if has_boundary:
+            target_source_list = self.RIDGE_DIRECTION_SOURCE_LIST.copy()
+        if (
+            target_source_list == self._active_direction_source_list
+            and self.combo_direction.count() == len(target_source_list)
+        ):
+            return
+        current_source = self._current_direction_source()
+        self.combo_direction.blockSignals(True)
+        self.combo_direction.clear()
+        for source_key in target_source_list:
+            label_key = self.DIRECTION_LABEL_KEY_MAP[source_key]
+            self.combo_direction.addItem(tr(label_key))
+        self._active_direction_source_list = target_source_list
+        next_source = current_source
+        if next_source not in self._active_direction_source_list:
+            next_source = "manual_draw"
+        self.combo_direction.setCurrentIndex(
+            self._active_direction_source_list.index(next_source)
+        )
+        self.combo_direction.blockSignals(False)
+
+    def _has_points_input(self) -> bool:
+        """Return whether usable points are loaded in current input bundle."""
+        if self._input_bundle is None:
+            return False
+        points_gdf = self._input_bundle.get("points_gdf")
+        if not isinstance(points_gdf, gpd.GeoDataFrame):
+            return False
+        return len(points_gdf) > 0
+
+    def _has_boundary_input(self) -> bool:
+        """Return whether boundary geometry exists in current input bundle."""
+        if self._input_bundle is None:
+            return False
+        boundary_gdf = self._input_bundle.get("boundary_gdf")
+        if boundary_gdf is None:
+            return False
+        if not isinstance(boundary_gdf, gpd.GeoDataFrame):
+            return False
+        return not boundary_gdf.empty
+
+    def _set_ridge_controls_enabled(self, enabled: bool) -> None:
+        """Set enabled state for all ridge tab controls."""
+        self.combo_direction.setEnabled(enabled)
+        self.btn_set_ridge_direction.setEnabled(enabled)
+        self.btn_focus_ridge.setEnabled(enabled)
+        self.spin_strength.setEnabled(enabled)
+        self.spin_distance.setEnabled(enabled)
+        self.spin_height.setEnabled(enabled)
+
+    def _refresh_ridge_ui_state(self) -> None:
+        """Refresh ridge tab source options and enabled state."""
+        has_points = self._has_points_input()
+        has_boundary = self._has_boundary_input()
+        self._set_direction_source_options(has_boundary=has_boundary)
+        self._set_ridge_controls_enabled(has_points)
+        if has_points:
+            return
+        self._deactivate_manual_draw_mode(clear_vector=True)
 
     def _on_direction_source_changed(self, _index: int) -> None:
         """Handle ridge direction source change and cleanup transitions."""
         source_key = self._current_direction_source()
         if source_key == "manual_draw":
+            self._reset_manual_draw_state(clear_layer=True)
             self._activate_manual_draw_mode()
             self._schedule_update("ridge")
             return
         if self._manual_draw_active:
             self._deactivate_manual_draw_mode(clear_vector=True)
+        self._sync_boundary_direction_layer(source_key)
         self._schedule_update("ridge")
 
     def _activate_manual_draw_mode(self) -> None:
@@ -352,6 +423,7 @@ class RenameTab(TabInterface):
             self._manual_start_point_array = None
             self._manual_end_point_array = None
             self._manual_direction_vector_array = None
+            self.map_component.map_canvas.remove_layer("ridge_direction")
 
     def _register_manual_draw_handlers(self) -> None:
         """Register map canvas handlers for manual draw mode."""
@@ -377,9 +449,19 @@ class RenameTab(TabInterface):
         if self._manual_preview_line_item is not None:
             map_canvas.remove_overlay_item(self._manual_preview_line_item)
             self._manual_preview_line_item = None
-        if self._manual_fixed_line_item is not None:
-            map_canvas.remove_overlay_item(self._manual_fixed_line_item)
-            self._manual_fixed_line_item = None
+        if self._manual_fixed_arrow_item is not None:
+            map_canvas.remove_overlay_item(self._manual_fixed_arrow_item)
+            self._manual_fixed_arrow_item = None
+
+    def _reset_manual_draw_state(self, clear_layer: bool) -> None:
+        """Reset manual draw points, vector, and transient overlays."""
+        self._manual_start_point_array = None
+        self._manual_end_point_array = None
+        self._manual_direction_vector_array = None
+        self._remove_manual_overlay_items()
+        if not clear_layer:
+            return
+        self.map_component.map_canvas.remove_layer("ridge_direction")
 
     def _build_manual_line_item(self, color_hex: str) -> pg.PlotCurveItem:
         """Create one manual draw line item.
@@ -467,23 +549,172 @@ class RenameTab(TabInterface):
         y_data = [self._manual_start_point_array[1], float(y_coord)]
         self._manual_preview_line_item.setData(x=x_data, y=y_data)
 
-    def _draw_manual_fixed_line(self) -> None:
-        """Draw fixed manual line segment from saved start and end points."""
+    def _build_ridge_direction_arrow_geometry(
+        self,
+        start_point_array: np.ndarray,
+        end_point_array: np.ndarray,
+    ) -> MultiLineString:
+        """Build one arrow multiline geometry for ridge_direction layer."""
+        shaft_vec = end_point_array - start_point_array
+        shaft_len = float(np.linalg.norm(shaft_vec))
+        unit_vec = normalize_direction_vector(shaft_vec)
+        head_len = max(shaft_len * 0.18, 1e-6)
+        head_width = head_len * 0.7
+        tip_point = end_point_array
+        back_point = tip_point - unit_vec * head_len
+        ortho_vec = np.asarray([-unit_vec[1], unit_vec[0]], dtype=np.float64)
+        left_point = back_point + ortho_vec * head_width
+        right_point = back_point - ortho_vec * head_width
+        line_list = [
+            [tuple(start_point_array), tuple(tip_point)],
+            [tuple(tip_point), tuple(left_point)],
+            [tuple(tip_point), tuple(right_point)],
+        ]
+        return MultiLineString(line_list)
+
+    def _effective_points_array(self) -> np.ndarray:
+        """Return effective points array with shape (N, 2)."""
+        if self._input_bundle is None:
+            raise ValueError("input bundle is missing")
+        points_gdf = self._input_bundle["points_gdf"]
+        point_array = np.column_stack(
+            (points_gdf.geometry.x.to_numpy(), points_gdf.geometry.y.to_numpy())
+        )
+        mask_array = np.asarray(
+            self._input_bundle.get("effective_mask", np.ones(len(points_gdf))),
+            dtype=np.bool_,
+        )
+        if mask_array.shape[0] != point_array.shape[0]:
+            raise ValueError("effective mask length mismatch")
+        eff_array = point_array[mask_array]
+        if eff_array.shape[0] < 2:
+            raise ValueError("effective points are insufficient")
+        return eff_array
+
+    def _line_intersections_with_box(
+        self,
+        center_array: np.ndarray,
+        axis_array: np.ndarray,
+        box_polygon,
+        scale_len: float,
+    ) -> list[np.ndarray]:
+        """Compute line-box intersections for one axis passing box center."""
+        line = LineString(
+            [
+                tuple(center_array - axis_array * scale_len),
+                tuple(center_array + axis_array * scale_len),
+            ]
+        )
+        inter = box_polygon.boundary.intersection(line)
+        if inter.is_empty:
+            raise ValueError("no intersection between axis line and bounding box")
+        if inter.geom_type == "Point":
+            return [np.asarray([inter.x, inter.y], dtype=np.float64)]
+        if inter.geom_type == "MultiPoint":
+            return [np.asarray([pt.x, pt.y], dtype=np.float64) for pt in inter.geoms]
+        coord_list = list(getattr(inter, "coords", []))
+        return [np.asarray([x, y], dtype=np.float64) for x, y in coord_list]
+
+    def _compute_boundary_direction_segment(
+        self,
+        source_key: str,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Compute ridge direction segment using effective points and MABR."""
+        if self._input_bundle is None:
+            raise ValueError("input bundle is missing")
+        boundary_axes = self._input_bundle.get("boundary_axes")
+        if boundary_axes is None:
+            raise ValueError("boundary axes are missing")
+        axis_vec = resolve_direction_vector(source_key, boundary_axes=boundary_axes)
+        eff_array = self._effective_points_array()
+        box_polygon = MultiPoint(
+            [tuple(row) for row in eff_array]
+        ).minimum_rotated_rectangle
+        center_array = np.asarray(box_polygon.centroid.coords[0], dtype=np.float64)
+        bbox_min, _, bbox_max, _ = box_polygon.bounds
+        scale_len = max(float(bbox_max - bbox_min), 1.0) * 4.0
+        point_list = self._line_intersections_with_box(
+            center_array,
+            axis_vec,
+            box_polygon,
+            scale_len,
+        )
+        if len(point_list) < 2:
+            raise ValueError("axis line intersection needs at least two points")
+        proj_list = [float(np.dot(pt - center_array, axis_vec)) for pt in point_list]
+        start_idx = int(np.argmin(proj_list))
+        end_idx = int(np.argmax(proj_list))
+        return point_list[start_idx], point_list[end_idx]
+
+    def _sync_boundary_direction_layer(self, source_key: str) -> None:
+        """Sync ridge direction layer when boundary direction source is selected."""
+        if not source_key.startswith("boundary_"):
+            return
+        try:
+            start_pt, end_pt = self._compute_boundary_direction_segment(source_key)
+        except Exception:
+            self.map_component.map_canvas.remove_layer("ridge_direction")
+            return
+        crs_value = None
+        if self._input_bundle is not None:
+            points_gdf = self._input_bundle.get("points_gdf")
+            if isinstance(points_gdf, gpd.GeoDataFrame):
+                crs_value = points_gdf.crs
+        arrow_geom = self._build_ridge_direction_arrow_geometry(start_pt, end_pt)
+        ridge_gdf = gpd.GeoDataFrame(
+            {"name": ["ridge_direction"]},
+            geometry=[arrow_geom],
+            crs=crs_value,
+        )
+        self.map_component.map_canvas.add_vector_layer(
+            ridge_gdf,
+            "ridge_direction",
+            color="#FF7A00",
+            width=2,
+        )
+
+    def _sync_manual_direction_layer(self) -> None:
+        """Sync manual ridge direction as vector layer in map and layer tree."""
         if (
             self._manual_start_point_array is None
             or self._manual_end_point_array is None
         ):
             return
+        crs_value = None
+        if self._input_bundle is not None:
+            points_gdf = self._input_bundle.get("points_gdf")
+            if isinstance(points_gdf, gpd.GeoDataFrame):
+                crs_value = points_gdf.crs
+        arrow_geom = self._build_ridge_direction_arrow_geometry(
+            self._manual_start_point_array,
+            self._manual_end_point_array,
+        )
+        ridge_gdf = gpd.GeoDataFrame(
+            {"name": ["ridge_direction"]},
+            geometry=[arrow_geom],
+            crs=crs_value,
+        )
+        self.map_component.map_canvas.add_vector_layer(
+            ridge_gdf,
+            "ridge_direction",
+            color="#FF7A00",
+            width=2,
+        )
+
+    def _draw_manual_fixed_line(self) -> None:
+        """Finalize manual draw by syncing ridge_direction layer."""
+        if (
+            self._manual_start_point_array is None
+            or self._manual_end_point_array is None
+            or self._manual_direction_vector_array is None
+        ):
+            return
         map_canvas = self.map_component.map_canvas
-        if self._manual_fixed_line_item is None:
-            self._manual_fixed_line_item = self._build_manual_line_item("#FF7A00")
-            map_canvas.add_overlay_item(self._manual_fixed_line_item)
-        x_data = [self._manual_start_point_array[0], self._manual_end_point_array[0]]
-        y_data = [self._manual_start_point_array[1], self._manual_end_point_array[1]]
-        self._manual_fixed_line_item.setData(x=x_data, y=y_data)
+        self._manual_fixed_arrow_item = None
         if self._manual_preview_line_item is not None:
             map_canvas.remove_overlay_item(self._manual_preview_line_item)
             self._manual_preview_line_item = None
+        self._sync_manual_direction_layer()
 
     def _build_ordering_tab(self) -> QWidget:
         """Build Ordering tab."""
@@ -612,6 +843,7 @@ class RenameTab(TabInterface):
         self._dom_layers_cache = list(bundle.get("dom_layers", []))
         points_meta = bundle.get("points_meta", {})
         self._current_points_source = str(points_meta.get("source", "send_next"))
+        self._refresh_ridge_ui_state()
         self._render_points_overlay(bundle["points_gdf"])
         self._emit_input_ready()
 
@@ -833,6 +1065,7 @@ class RenameTab(TabInterface):
             )
             self._input_bundle = new_bundle
             self._current_points_source = "file"
+            self._refresh_ridge_ui_state()
             self._render_points_overlay(new_bundle["points_gdf"])
             self.sigLoadShp.emit(file_path)
             self._emit_input_ready()
@@ -844,6 +1077,7 @@ class RenameTab(TabInterface):
             )
         except Exception as exc:
             self._input_bundle = prev_bundle
+            self._refresh_ridge_ui_state()
             InfoBar.error(
                 title=tr("error"),
                 content=f"Failed to load points: {exc}",
@@ -877,6 +1111,7 @@ class RenameTab(TabInterface):
             self._input_bundle["boundary_gdf"] = boundary_aligned
             self._input_bundle["boundary_axes"] = boundary_axes
             self._input_bundle["effective_mask"] = effective_mask
+            self._refresh_ridge_ui_state()
             self.map_component.map_canvas.add_vector_layer(
                 boundary_aligned,
                 "Boundary",
