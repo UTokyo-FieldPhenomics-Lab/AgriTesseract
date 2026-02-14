@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 import rasterio
+import geopandas as gpd
 from loguru import logger
 from PySide6.QtCore import Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
@@ -47,6 +48,13 @@ from src.utils.seedling_detect.qthread import (
 )
 from src.utils.seedling_detect.slice import merge_slice_detections
 from src.utils.subplot_generate.io import load_boundary_gdf
+from src.utils.rename_ids.boundary import (
+    align_boundary_crs,
+    build_effective_mask,
+    compute_boundary_axes,
+)
+from src.utils.rename_ids.io import normalize_input_points
+from shapely.geometry import Point
 
 
 def seedling_top_tab_keys() -> tuple[str, ...]:
@@ -921,8 +929,9 @@ class SeedlingTab(TabInterface):
         rename_tab = getattr(window_obj, "rename_tab", None)
         if rename_tab is None:
             return
-        rename_tab.sigLoadShp.emit(self._last_export_points_path)
-        self._copy_points_overlay_to_rename_tab(rename_tab)
+        is_object_handoff = self._handoff_bundle_or_fallback(rename_tab)
+        if not is_object_handoff:
+            self._copy_points_overlay_to_rename_tab(rename_tab)
         switch_method = getattr(window_obj, "switchTo", None)
         if callable(switch_method):
             switch_method(rename_tab)
@@ -933,13 +942,105 @@ class SeedlingTab(TabInterface):
             else None
         )
         if rename_canvas is not None:
-            rename_canvas.zoom_to_layer("result_points")
+            zoom_layer_name = "rename_points" if is_object_handoff else "result_points"
+            rename_canvas.zoom_to_layer(zoom_layer_name)
         InfoBar.success(
             title=tr("success"),
             content=tr("page.seedling.msg.sent_to_next"),
             parent=self,
             duration=1800,
         )
+
+    def _handoff_bundle_or_fallback(self, rename_tab: object) -> bool:
+        """Send object-first bundle to rename tab and fallback to shapefile path.
+
+        Parameters
+        ----------
+        rename_tab : object
+            Downstream rename tab instance.
+
+        Returns
+        -------
+        bool
+            True when object-first handoff succeeds.
+        """
+        bundle = self._build_rename_input_bundle()
+        setter = getattr(rename_tab, "set_input_bundle", None)
+        if bundle is not None and callable(setter):
+            try:
+                setter(bundle)
+                return True
+            except Exception as exc:
+                logger.warning(f"Rename bundle handoff failed, fallback to path: {exc}")
+        sig_load_shp = getattr(rename_tab, "sigLoadShp", None)
+        emit_func = getattr(sig_load_shp, "emit", None)
+        if self._last_export_points_path and callable(emit_func):
+            emit_func(self._last_export_points_path)
+        return False
+
+    def _build_rename_input_bundle(self) -> dict | None:
+        """Assemble RenameInputBundle from current seedling outputs."""
+        if self._last_full_result is None:
+            return None
+        merged = self._last_full_result.get("merged", {})
+        points_gdf = self._build_points_gdf_from_merged(merged)
+        if points_gdf is None:
+            return None
+        points_gdf, points_meta = normalize_input_points(points_gdf)
+        points_gdf, boundary_gdf, boundary_axes, effective_mask = (
+            self._build_boundary_payload(points_gdf)
+        )
+        dom_layers = self._build_dom_layers_payload()
+        return {
+            "points_gdf": points_gdf,
+            "points_meta": {
+                "source": "send_next",
+                "id_field": points_meta["id_field"],
+                "crs_wkt": points_meta["crs_wkt"],
+                "source_tag": "seedling_detect",
+            },
+            "boundary_gdf": boundary_gdf,
+            "boundary_axes": boundary_axes,
+            "effective_mask": effective_mask,
+            "dom_layers": dom_layers,
+        }
+
+    def _build_points_gdf_from_merged(
+        self, merged_payload: dict
+    ) -> gpd.GeoDataFrame | None:
+        """Build points GeoDataFrame from merged detection payload."""
+        points_xy = np.asarray(
+            merged_payload.get("points_xy", np.zeros((0, 2))), dtype=float
+        )
+        if points_xy.size == 0:
+            return None
+        point_list = [Point(float(x), float(y)) for x, y in points_xy]
+        points_gdf = gpd.GeoDataFrame(
+            {"fid": np.arange(len(point_list), dtype=int), "source": "sam3"},
+            geometry=point_list,
+            crs=self._current_dom_crs_wkt(),
+        )
+        return points_gdf
+
+    def _build_boundary_payload(
+        self,
+        points_gdf: gpd.GeoDataFrame,
+    ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame | None, dict | None, np.ndarray]:
+        """Build boundary fields used by rename bundle contract."""
+        if self._boundary_gdf is None:
+            return points_gdf, None, None, np.ones(len(points_gdf), dtype=np.bool_)
+        points_aligned, boundary_aligned = align_boundary_crs(
+            points_gdf, self._boundary_gdf
+        )
+        boundary_axes = compute_boundary_axes(boundary_aligned)
+        effective_mask = build_effective_mask(points_aligned, boundary_aligned)
+        return points_aligned, boundary_aligned, boundary_axes, effective_mask
+
+    def _build_dom_layers_payload(self) -> list[dict[str, str]]:
+        """Build DOM layer list for rename bundle."""
+        if not self._dom_path:
+            return []
+        return [{"name": Path(self._dom_path).stem, "path": self._dom_path}]
 
     def _export_points_to_default_cache(self) -> None:
         """Export current merged points to cache path for send-next action."""
