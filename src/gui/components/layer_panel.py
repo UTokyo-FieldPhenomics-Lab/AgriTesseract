@@ -28,14 +28,14 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QDragMoveEvent, QAction
 from loguru import logger
 
 from qfluentwidgets import (
-    TreeWidget, 
-    CommandBar, 
-    Action, 
-    FluentIcon as FIF, 
-    Flyout, 
+    TreeWidget,
+    CommandBar,
+    Action,
+    FluentIcon as FIF,
+    Flyout,
     FlyoutAnimationType,
     RoundMenu,
-    MenuAnimationType
+    MenuAnimationType,
 )
 
 from src.gui.config import tr, cfg
@@ -112,7 +112,9 @@ class LayerPanel(QWidget):
     sigLayerSelected = Signal(str)
     sigLayerDeleted = Signal(str)
     sigAddLayerRequested = Signal()
-    sigContextMenuRequested = Signal(object, object) # menu object, layer name (or None)
+    sigContextMenuRequested = Signal(
+        object, object
+    )  # menu object, layer name (or None)
     sigZoomToLayer = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
@@ -141,7 +143,7 @@ class LayerPanel(QWidget):
         """Initialize the UI components."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        
+
         # Header
         header_layout = QHBoxLayout()
         header_label = QLabel(tr("layer_panel.title"))
@@ -156,7 +158,7 @@ class LayerPanel(QWidget):
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(False)
         self._tree.setIndentation(0)
-        
+
         # TreeWidget style tweaks
         self._tree.setBorderVisible(True)
         self._tree.setBorderRadius(8)
@@ -178,10 +180,7 @@ class LayerPanel(QWidget):
         self.setMaximumWidth(400)
 
     def add_layer(
-        self,
-        name: str,
-        layer_type: str = "raster",
-        visible: bool = True
+        self, name: str, layer_type: str = "raster", visible: bool = True
     ) -> None:
         """Add a layer to the panel."""
         if name in self._layers:
@@ -194,13 +193,15 @@ class LayerPanel(QWidget):
         # Create tree item
         item = QTreeWidgetItem([name])
         item.setFlags(
-            Qt.ItemFlag.ItemIsUserCheckable |
-            Qt.ItemFlag.ItemIsEditable |
-            Qt.ItemFlag.ItemIsEnabled |
-            Qt.ItemFlag.ItemIsSelectable |
-            Qt.ItemFlag.ItemIsDragEnabled
+            Qt.ItemFlag.ItemIsUserCheckable
+            | Qt.ItemFlag.ItemIsEditable
+            | Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsDragEnabled
         )
-        item.setCheckState(0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked)
+        item.setCheckState(
+            0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked
+        )
 
         # Set icon based on type (Use text prefix as icon substitute or actual Icon if available)
         # Using emoji for now as per previous design, but could use FluentIcon
@@ -215,11 +216,7 @@ class LayerPanel(QWidget):
         self._tree.insertTopLevelItem(0, item)
 
         # Register layer
-        self._layers[name] = {
-            'type': layer_type,
-            'visible': visible,
-            'item': item
-        }
+        self._layers[name] = {"type": layer_type, "visible": visible, "item": item}
 
         self._tree.blockSignals(False)
         self._tree.setCurrentItem(item)
@@ -227,7 +224,9 @@ class LayerPanel(QWidget):
         # Emit order changed
         self._on_order_changed()
 
-        logger.debug(f"Layer added: {name} ({layer_type}). Tree count: {self._tree.topLevelItemCount()}")
+        logger.debug(
+            f"Layer added: {name} ({layer_type}). Tree count: {self._tree.topLevelItemCount()}"
+        )
 
     def remove_layer(self, name: str) -> bool:
         """Remove a layer from the panel."""
@@ -235,7 +234,7 @@ class LayerPanel(QWidget):
             return False
 
         layer_info = self._layers[name]
-        item = layer_info.get('item')
+        item = layer_info.get("item")
 
         if item:
             root = self._tree.invisibleRootItem()
@@ -255,18 +254,58 @@ class LayerPanel(QWidget):
             name = item.text(0)
             order.append(name)
         return order
-        
+
     def set_layer_visibility(self, name: str, visible: bool) -> None:
         """Set visibility of a layer."""
         if name not in self._layers:
             return
 
-        self._layers[name]['visible'] = visible
-        item = self._layers[name].get('item')
+        self._layers[name]["visible"] = visible
+        item = self._layers[name].get("item")
         if item:
             self._tree.blockSignals(True)
-            item.setCheckState(0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked)
+            item.setCheckState(
+                0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked
+            )
             self._tree.blockSignals(False)
+
+    def set_layer_order(self, order: List[str]) -> None:
+        """Apply external layer order to tree without re-emitting signals.
+
+        Parameters
+        ----------
+        order : list[str]
+            Layer names from top to bottom.
+        """
+        item_list = []
+        for layer_name in order:
+            if layer_name not in self._layers:
+                continue
+            item_obj = self._layers[layer_name].get("item")
+            if item_obj is not None:
+                item_list.append(item_obj)
+        if not item_list:
+            return
+        self._tree.blockSignals(True)
+        root = self._tree.invisibleRootItem()
+        for item_obj in item_list:
+            root.removeChild(item_obj)
+        for index, item_obj in enumerate(item_list):
+            self._tree.insertTopLevelItem(index, item_obj)
+        self._tree.blockSignals(False)
+
+    def rename_layer(self, old_name: str, new_name: str) -> bool:
+        """Rename one layer in panel tree and internal registry."""
+        if old_name not in self._layers or new_name in self._layers:
+            return False
+        layer_info = self._layers.pop(old_name)
+        item_obj = layer_info.get("item")
+        if item_obj is not None:
+            self._tree.blockSignals(True)
+            item_obj.setText(0, new_name)
+            self._tree.blockSignals(False)
+        self._layers[new_name] = layer_info
+        return True
 
     def _on_order_changed(self) -> None:
         """Handle layer order change."""
@@ -281,15 +320,15 @@ class LayerPanel(QWidget):
 
         # Check if this is a rename operation (text changed)
         current_name = item.text(0)
-        
+
         # Determine if check state matches internal state
         is_checked = item.checkState(0) == Qt.CheckState.Checked
-        
+
         if self._old_rename_key:
             # Finishing rename
             old_name = self._old_rename_key
             self._old_rename_key = None
-            
+
             if old_name != current_name:
                 self._process_rename(old_name, current_name, item)
             return
@@ -297,18 +336,18 @@ class LayerPanel(QWidget):
         # Visibility Check
         found_name = None
         for name, info in self._layers.items():
-            if info['item'] == item:
+            if info["item"] == item:
                 found_name = name
                 break
-        
+
         if found_name:
             # Check visibility mismatch
-            if self._layers[found_name]['visible'] != is_checked:
+            if self._layers[found_name]["visible"] != is_checked:
                 self._process_visibility_change(found_name, is_checked)
 
     def _process_visibility_change(self, name: str, visible: bool) -> None:
         """Process visibility checkbox change."""
-        self._layers[name]['visible'] = visible
+        self._layers[name]["visible"] = visible
         self.sigLayerVisibilityChanged.emit(name, visible)
         logger.debug(f"Layer '{name}' visibility: {visible}")
 
@@ -319,9 +358,9 @@ class LayerPanel(QWidget):
         # Check if new name already exists
         if new_name in self._layers:
             QMessageBox.warning(
-                self, 
-                tr("layer_panel.rename.fail.title"), 
-                tr("layer_panel.rename.fail.msg").format(name=new_name)
+                self,
+                tr("layer_panel.rename.fail.title"),
+                tr("layer_panel.rename.fail.msg").format(name=new_name),
             )
             # Revert to old name
             self._tree.blockSignals(True)
@@ -334,9 +373,7 @@ class LayerPanel(QWidget):
         logger.debug(f"Layer renamed: '{old_name}' -> '{new_name}'")
 
     def _on_selection_changed(
-        self,
-        current: QTreeWidgetItem,
-        previous: QTreeWidgetItem
+        self, current: QTreeWidgetItem, previous: QTreeWidgetItem
     ) -> None:
         """Handle layer selection change."""
         if current:
@@ -353,7 +390,7 @@ class LayerPanel(QWidget):
         """Show context menu on right-click using CommandBarFlyout."""
         logger.debug(f"Context menu requested at {position}")
         item = self._tree.itemAt(position)
-        
+
         layer_name = None
         if item:
             logger.debug(f"Item found at pos: {item.text(0)}")
@@ -367,22 +404,38 @@ class LayerPanel(QWidget):
         # User requested: "Command bar flyout in blank space"
         # Let's use RoundMenu for now as it's more standard for Right Click context
         # But if user insists on CommandBarFlyout view style:
-        
+
         menu = RoundMenu(parent=self)
-        
+
         if layer_name:
             # Item Context Menu
-            menu.addAction(Action(FIF.ZOOM_IN, tr("layer_panel.menu.zoom"), triggered=lambda: self._zoom_to_layer(layer_name)))
+            menu.addAction(
+                Action(
+                    FIF.ZOOM_IN,
+                    tr("layer_panel.menu.zoom"),
+                    triggered=lambda: self._zoom_to_layer(layer_name),
+                )
+            )
             menu.addSeparator()
-            menu.addAction(Action(FIF.DELETE, tr("layer_panel.menu.delete"), triggered=lambda: self._delete_layer(layer_name)))
-            
+            menu.addAction(
+                Action(
+                    FIF.DELETE,
+                    tr("layer_panel.menu.delete"),
+                    triggered=lambda: self._delete_layer(layer_name),
+                )
+            )
+
             # Emit signal for external actions
             self.sigContextMenuRequested.emit(menu, layer_name)
-            
+
         else:
             # Blank Space Context Menu
-            menu.addAction(Action(FIF.ADD, tr("layer_panel.menu.add"), triggered=self._on_add_clicked))
-            
+            menu.addAction(
+                Action(
+                    FIF.ADD, tr("layer_panel.menu.add"), triggered=self._on_add_clicked
+                )
+            )
+
             # Emit signal for external actions (e.g. "Add Subplots")
             self.sigContextMenuRequested.emit(menu, None)
 
@@ -402,7 +455,7 @@ class LayerPanel(QWidget):
             self,
             tr("layer_panel.confirm.delete.title"),
             tr("layer_panel.confirm.delete.msg").format(name=name),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
@@ -424,8 +477,14 @@ class LayerPanel(QWidget):
             theme_name = "dark" if darkdetect.isDark() else "light"
         else:
             theme_name = theme.value.lower()
-            
-        qss_path = Path(__file__).parent.parent / "resource" / "qss" / theme_name / "layer_panel.qss"
+
+        qss_path = (
+            Path(__file__).parent.parent
+            / "resource"
+            / "qss"
+            / theme_name
+            / "layer_panel.qss"
+        )
         if qss_path.exists():
-            with open(qss_path, encoding='utf-8') as f:
+            with open(qss_path, encoding="utf-8") as f:
                 self.setStyleSheet(f.read())

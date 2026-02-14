@@ -185,6 +185,8 @@ class MapCanvas(QWidget):
     sigLayerAdded = Signal(str, str)  # name, type
     sigLayerRemoved = Signal(str)
     sigLayerVisibilityChanged = Signal(str, bool)
+    sigLayerOrderChanged = Signal(list)
+    sigLayerRenamed = Signal(str, str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -610,6 +612,31 @@ class MapCanvas(QWidget):
         self.sigLayerRemoved.emit(layer_name)
         return True
 
+    def rename_layer(self, old_name: str, new_name: str) -> bool:
+        """Rename layer key while preserving item and order.
+
+        Parameters
+        ----------
+        old_name : str
+            Existing layer name.
+        new_name : str
+            New target layer name.
+
+        Returns
+        -------
+        bool
+            True when rename succeeds.
+        """
+        if old_name not in self._layers or new_name in self._layers:
+            return False
+        self._layers[new_name] = self._layers.pop(old_name)
+        self._layer_order = [
+            new_name if name == old_name else name for name in self._layer_order
+        ]
+        self.sigLayerRenamed.emit(old_name, new_name)
+        self.sigLayerOrderChanged.emit(list(self._layer_order))
+        return True
+
     def set_layer_visibility(self, layer_name: str, visible: bool) -> None:
         """
         Set visibility of a layer.
@@ -642,7 +669,42 @@ class MapCanvas(QWidget):
             if name in self._layers:
                 z_value = -100 + i
                 self._layers[name]["item"].setZValue(z_value)
+        self.sigLayerOrderChanged.emit(list(order))
         logger.debug(f"Layer order updated: {order}")
+
+    def ensure_layers_bottom(self, layer_names: List[str]) -> None:
+        """Move given layers to bottom while preserving internal top order.
+
+        Parameters
+        ----------
+        layer_names : list[str]
+            Layer names that should stay at the bottom of layer tree.
+
+        Notes
+        -----
+        New names in ``layer_names`` are treated as newer layers and kept above
+        older names within the same bottom group.
+        """
+        target_names = [name for name in layer_names if name in self._layers]
+        if not target_names:
+            return
+        current_order = [name for name in self._layer_order if name in self._layers]
+        seen_names = set()
+        unique_targets = []
+        for name in target_names:
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            unique_targets.append(name)
+        target_set = set(unique_targets)
+        non_target_names = [name for name in current_order if name not in target_set]
+        existing_targets = [name for name in current_order if name in target_set]
+        final_order = (
+            non_target_names
+            + unique_targets
+            + [name for name in existing_targets if name not in unique_targets]
+        )
+        self.update_layer_order(final_order)
 
     def set_rotation(self, angle: float) -> None:
         """

@@ -1,4 +1,3 @@
-
 from typing import Optional
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter
@@ -7,6 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from src.gui.components.layer_panel import LayerPanel
 from src.gui.components.map_canvas import MapCanvas
 from src.gui.components.status_bar import StatusBar
+
 
 class MapComponent(QWidget):
     """
@@ -23,7 +23,7 @@ class MapComponent(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        
+
         self._init_ui()
         self._connect_signals()
 
@@ -37,7 +37,7 @@ class MapComponent(QWidget):
         self.h_splitter.setHandleWidth(1)
         # Initial sizes (Layer:Map = 1:4)
         self.h_splitter.setSizes([200, 800])
-        
+
         # 1. Layer Panel
         self.layer_panel = LayerPanel()
         self.h_splitter.addWidget(self.layer_panel)
@@ -47,7 +47,7 @@ class MapComponent(QWidget):
         self.v_splitter.setHandleWidth(1)
 
         self.h_splitter.addWidget(self.v_splitter)
-        
+
         # 2. Map Canvas
         self.map_canvas = MapCanvas()
         self.v_splitter.addWidget(self.map_canvas)
@@ -55,9 +55,8 @@ class MapComponent(QWidget):
         # 3. Status Bar
         self.status_bar = StatusBar()
         self.v_splitter.addWidget(self.status_bar)
-        
-        layout.addWidget(self.h_splitter, 1) # Take available vertical space
 
+        layout.addWidget(self.h_splitter, 1)  # Take available vertical space
 
     def _connect_signals(self) -> None:
         # Layer Panel -> Map Canvas
@@ -72,7 +71,7 @@ class MapComponent(QWidget):
         self.map_canvas.sigCoordinateChanged.connect(self.status_bar.update_coordinates)
         self.map_canvas.sigZoomChanged.connect(self.status_bar.update_zoom)
         self.map_canvas.sigRotationChanged.connect(self.status_bar.update_rotation)
-        
+
         # Status Bar -> Map Canvas (Control)
         self.status_bar.sigZoomChanged.connect(self.map_canvas.set_zoom)
         self.status_bar.sigRotationChanged.connect(self.map_canvas.set_rotation)
@@ -87,9 +86,13 @@ class MapComponent(QWidget):
         self.map_canvas.sigLayerAdded.connect(self.layer_panel.add_layer)
         self.map_canvas.sigLayerRemoved.connect(self.layer_panel.remove_layer)
         self.layer_panel.sigLayerDeleted.connect(self.map_canvas.remove_layer)
-        self.map_canvas.sigLayerVisibilityChanged.connect(self.layer_panel.set_layer_visibility)
+        self.map_canvas.sigLayerVisibilityChanged.connect(
+            self.layer_panel.set_layer_visibility
+        )
+        self.map_canvas.sigLayerOrderChanged.connect(self.layer_panel.set_layer_order)
+        self.map_canvas.sigLayerRenamed.connect(self.layer_panel.rename_layer)
 
     def cleanup(self):
         """Cleanup resources."""
-        if hasattr(self.map_canvas, 'cleanup'):
+        if hasattr(self.map_canvas, "cleanup"):
             self.map_canvas.cleanup()
