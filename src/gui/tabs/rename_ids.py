@@ -447,10 +447,24 @@ class RenameTab(TabInterface):
         """Rotate map to follow stored ridge direction angle."""
         self._apply_saved_rotation()
 
+    def _set_edit_mode_exclusion_for_manual(self, manual_active: bool) -> None:
+        """Toggle numbering edit tools when manual ridge draw is active.
+
+        Parameters
+        ----------
+        manual_active : bool
+            Whether manual ridge draw mode is active.
+        """
+        for button in (self.btn_add, self.btn_move, self.btn_delete):
+            button.setEnabled(not manual_active)
+            if manual_active:
+                button.setChecked(False)
+
     def _activate_manual_draw_mode(self) -> None:
         """Activate manual draw interaction mode for ridge direction."""
         self._manual_draw_active = True
         self._register_manual_draw_handlers()
+        self._set_edit_mode_exclusion_for_manual(True)
 
     def _deactivate_manual_draw_mode(self, clear_vector: bool) -> None:
         """Deactivate manual draw mode and clear transient overlays.
@@ -463,6 +477,7 @@ class RenameTab(TabInterface):
         self._manual_draw_active = False
         self._unregister_manual_draw_handlers()
         self._remove_manual_overlay_items()
+        self._set_edit_mode_exclusion_for_manual(False)
         if clear_vector:
             self._manual_start_point_array = None
             self._manual_end_point_array = None
@@ -1270,7 +1285,9 @@ class RenameTab(TabInterface):
 
         if self._pending_update_type == "ridge":
             params = {
-                "direction_index": self.combo_direction.currentIndex(),
+                "ridge_direction_source": self._ridge_direction_source,
+                "ridge_direction_vector": self._ridge_direction_vector_array,
+                "rotation_angle_deg": self._ridge_rotation_angle_deg,
                 "strength": self.spin_strength.value(),
                 "distance": self.spin_distance.value(),
                 "height": self.spin_height.value(),
