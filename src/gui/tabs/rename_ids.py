@@ -42,6 +42,7 @@ from src.utils.rename_ids.boundary import (
     compute_boundary_axes,
 )
 from src.utils.rename_ids.io import load_points_data, normalize_input_points
+from src.utils.rename_ids.ridge_direction import normalize_direction_vector
 
 
 def rename_top_tab_keys() -> tuple[str, ...]:
@@ -68,12 +69,27 @@ class RenameTab(TabInterface):
     sigRidgeParamsChanged = Signal(dict)
     sigOrderingParamsChanged = Signal(dict)
     sigNumberingParamsChanged = Signal(dict)
+    RIDGE_DIRECTION_SOURCE_LIST = [
+        "boundary_x",
+        "boundary_y",
+        "boundary_-x",
+        "boundary_-y",
+        "manual_draw",
+    ]
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._input_bundle: dict[str, Any] | None = None
         self._current_points_source: str = ""
         self._dom_layers_cache: list[dict[str, str]] = []
+
+        self._manual_draw_active: bool = False
+        self._manual_start_point_array: np.ndarray | None = None
+        self._manual_end_point_array: np.ndarray | None = None
+        self._manual_direction_vector_array: np.ndarray | None = None
+        self._manual_preview_line_item: pg.PlotCurveItem | None = None
+        self._manual_fixed_line_item: pg.PlotCurveItem | None = None
+        self._manual_handlers_registered: bool = False
 
         # Debounce timer for reactive updates
         self._update_timer = QTimer(self)
@@ -235,14 +251,24 @@ class RenameTab(TabInterface):
         self.combo_direction = ComboBox()
         self.combo_direction.addItems(
             [
-                tr("page.rename.combo.auto"),
-                tr("page.rename.combo.x"),
-                tr("page.rename.combo.y"),
+                tr("page.rename.combo.boundary_x"),
+                tr("page.rename.combo.boundary_y"),
+                tr("page.rename.combo.boundary_neg_x"),
+                tr("page.rename.combo.boundary_neg_y"),
+                tr("page.rename.combo.manual_draw"),
             ]
         )
         self.combo_direction.currentIndexChanged.connect(
-            lambda: self._schedule_update("ridge")
+            self._on_direction_source_changed
         )
+
+        self.btn_set_ridge_direction = PushButton(
+            tr("page.rename.btn.set_ridge_direction")
+        )
+        self.btn_set_ridge_direction.clicked.connect(
+            self._on_set_ridge_direction_clicked
+        )
+        self.btn_focus_ridge = PushButton(tr("page.rename.btn.focus_ridge"))
 
         self.spin_strength = SpinBox()
         self.spin_strength.setRange(1, 100)
@@ -264,6 +290,8 @@ class RenameTab(TabInterface):
                 "page.rename.label.direction", self.combo_direction
             )
         )
+        bar.addWidget(self.btn_set_ridge_direction)
+        bar.addWidget(self.btn_focus_ridge)
         bar.addWidget(
             self._build_labeled_widget("page.rename.label.strength", self.spin_strength)
         )
@@ -276,6 +304,186 @@ class RenameTab(TabInterface):
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
         return tab
+
+    def _on_set_ridge_direction_clicked(self) -> None:
+        """Switch direction source to manual draw when set button is clicked."""
+        self.combo_direction.setCurrentIndex(self._manual_direction_index())
+        self._activate_manual_draw_mode()
+
+    def _manual_direction_index(self) -> int:
+        """Return combo index of manual draw source."""
+        return self.RIDGE_DIRECTION_SOURCE_LIST.index("manual_draw")
+
+    def _current_direction_source(self) -> str:
+        """Return current ridge direction source key."""
+        index_value = self.combo_direction.currentIndex()
+        if index_value < 0 or index_value >= len(self.RIDGE_DIRECTION_SOURCE_LIST):
+            return "manual_draw"
+        return self.RIDGE_DIRECTION_SOURCE_LIST[index_value]
+
+    def _on_direction_source_changed(self, _index: int) -> None:
+        """Handle ridge direction source change and cleanup transitions."""
+        source_key = self._current_direction_source()
+        if source_key == "manual_draw":
+            self._activate_manual_draw_mode()
+            self._schedule_update("ridge")
+            return
+        if self._manual_draw_active:
+            self._deactivate_manual_draw_mode(clear_vector=True)
+        self._schedule_update("ridge")
+
+    def _activate_manual_draw_mode(self) -> None:
+        """Activate manual draw interaction mode for ridge direction."""
+        self._manual_draw_active = True
+        self._register_manual_draw_handlers()
+
+    def _deactivate_manual_draw_mode(self, clear_vector: bool) -> None:
+        """Deactivate manual draw mode and clear transient overlays.
+
+        Parameters
+        ----------
+        clear_vector : bool
+            Whether manual points and vector should be fully cleared.
+        """
+        self._manual_draw_active = False
+        self._unregister_manual_draw_handlers()
+        self._remove_manual_overlay_items()
+        if clear_vector:
+            self._manual_start_point_array = None
+            self._manual_end_point_array = None
+            self._manual_direction_vector_array = None
+
+    def _register_manual_draw_handlers(self) -> None:
+        """Register map canvas handlers for manual draw mode."""
+        if self._manual_handlers_registered:
+            return
+        map_canvas = self.map_component.map_canvas
+        map_canvas.register_click_handler(self._on_ridge_manual_click)
+        map_canvas.register_hover_handler(self._on_ridge_manual_hover)
+        self._manual_handlers_registered = True
+
+    def _unregister_manual_draw_handlers(self) -> None:
+        """Unregister map canvas handlers for manual draw mode."""
+        if not self._manual_handlers_registered:
+            return
+        map_canvas = self.map_component.map_canvas
+        map_canvas.unregister_click_handler(self._on_ridge_manual_click)
+        map_canvas.unregister_hover_handler(self._on_ridge_manual_hover)
+        self._manual_handlers_registered = False
+
+    def _remove_manual_overlay_items(self) -> None:
+        """Remove manual draw preview and fixed line overlay items."""
+        map_canvas = self.map_component.map_canvas
+        if self._manual_preview_line_item is not None:
+            map_canvas.remove_overlay_item(self._manual_preview_line_item)
+            self._manual_preview_line_item = None
+        if self._manual_fixed_line_item is not None:
+            map_canvas.remove_overlay_item(self._manual_fixed_line_item)
+            self._manual_fixed_line_item = None
+
+    def _build_manual_line_item(self, color_hex: str) -> pg.PlotCurveItem:
+        """Create one manual draw line item.
+
+        Parameters
+        ----------
+        color_hex : str
+            Line color string in hex format.
+
+        Returns
+        -------
+        pyqtgraph.PlotCurveItem
+            Empty curve item ready for coordinates.
+        """
+        line_item = pg.PlotCurveItem(
+            pen=pg.mkPen(color=color_hex, width=2.0),
+            connect="all",
+        )
+        line_item.setZValue(760)
+        return line_item
+
+    def _on_ridge_manual_click(self, x_coord: float, y_coord: float, button) -> bool:
+        """Handle manual draw click events from map canvas.
+
+        Parameters
+        ----------
+        x_coord : float
+            Click x coordinate in map space.
+        y_coord : float
+            Click y coordinate in map space.
+        button : Any
+            Mouse button enum from Qt.
+
+        Returns
+        -------
+        bool
+            True when the click was consumed by manual draw mode.
+        """
+        if not self._manual_draw_active:
+            return False
+        if button != Qt.MouseButton.LeftButton:
+            return False
+        point_array = np.asarray([x_coord, y_coord], dtype=np.float64)
+        if (
+            self._manual_start_point_array is None
+            or self._manual_end_point_array is not None
+        ):
+            self._manual_start_point_array = point_array
+            self._manual_end_point_array = None
+            self._remove_manual_overlay_items()
+            return True
+        self._manual_end_point_array = point_array
+        try:
+            vector_array = normalize_direction_vector(
+                self._manual_end_point_array - self._manual_start_point_array
+            )
+        except ValueError:
+            self._manual_end_point_array = None
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.rename.msg.manual_vector_invalid"),
+                parent=self,
+                duration=2200,
+            )
+            return True
+        self._manual_direction_vector_array = vector_array
+        self._draw_manual_fixed_line()
+        self._schedule_update("ridge")
+        return True
+
+    def _on_ridge_manual_hover(self, x_coord: float, y_coord: float) -> None:
+        """Handle manual draw hover updates for preview segment."""
+        if not self._manual_draw_active:
+            return
+        if self._manual_start_point_array is None:
+            return
+        if self._manual_end_point_array is not None:
+            return
+        if self._manual_preview_line_item is None:
+            self._manual_preview_line_item = self._build_manual_line_item("#00A3FF")
+            self.map_component.map_canvas.add_overlay_item(
+                self._manual_preview_line_item
+            )
+        x_data = [self._manual_start_point_array[0], float(x_coord)]
+        y_data = [self._manual_start_point_array[1], float(y_coord)]
+        self._manual_preview_line_item.setData(x=x_data, y=y_data)
+
+    def _draw_manual_fixed_line(self) -> None:
+        """Draw fixed manual line segment from saved start and end points."""
+        if (
+            self._manual_start_point_array is None
+            or self._manual_end_point_array is None
+        ):
+            return
+        map_canvas = self.map_component.map_canvas
+        if self._manual_fixed_line_item is None:
+            self._manual_fixed_line_item = self._build_manual_line_item("#FF7A00")
+            map_canvas.add_overlay_item(self._manual_fixed_line_item)
+        x_data = [self._manual_start_point_array[0], self._manual_end_point_array[0]]
+        y_data = [self._manual_start_point_array[1], self._manual_end_point_array[1]]
+        self._manual_fixed_line_item.setData(x=x_data, y=y_data)
+        if self._manual_preview_line_item is not None:
+            map_canvas.remove_overlay_item(self._manual_preview_line_item)
+            self._manual_preview_line_item = None
 
     def _build_ordering_tab(self) -> QWidget:
         """Build Ordering tab."""

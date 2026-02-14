@@ -960,6 +960,54 @@ class MapCanvas(QWidget):
         if scene is not None:
             scene.removeItem(item)
 
+    def register_click_handler(self, handler: Any) -> None:
+        """Register one external click handler.
+
+        Parameters
+        ----------
+        handler : Any
+            Callable with signature ``(x: float, y: float, button) -> bool``.
+        """
+        if handler in self._click_handlers:
+            return
+        self._click_handlers.append(handler)
+
+    def unregister_click_handler(self, handler: Any) -> None:
+        """Unregister one external click handler.
+
+        Parameters
+        ----------
+        handler : Any
+            Previously registered click handler.
+        """
+        if handler not in self._click_handlers:
+            return
+        self._click_handlers.remove(handler)
+
+    def register_hover_handler(self, handler: Any) -> None:
+        """Register one external hover handler.
+
+        Parameters
+        ----------
+        handler : Any
+            Callable with signature ``(x: float, y: float) -> None``.
+        """
+        if handler in self._hover_handlers:
+            return
+        self._hover_handlers.append(handler)
+
+    def unregister_hover_handler(self, handler: Any) -> None:
+        """Unregister one external hover handler.
+
+        Parameters
+        ----------
+        handler : Any
+            Previously registered hover handler.
+        """
+        if handler not in self._hover_handlers:
+            return
+        self._hover_handlers.remove(handler)
+
     # -- event handlers ----------------------------------------------------
 
     def _on_mouse_moved(self, evt: tuple) -> None:
