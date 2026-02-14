@@ -44,6 +44,7 @@ from src.utils.rename_ids.boundary import (
 )
 from src.utils.rename_ids.io import load_points_data, normalize_input_points
 from src.utils.rename_ids.ridge_direction import (
+    compute_rotation_angle_deg,
     normalize_direction_vector,
     resolve_direction_vector,
 )
@@ -102,6 +103,9 @@ class RenameTab(TabInterface):
         self._manual_fixed_arrow_item: pg.ArrowItem | None = None
         self._manual_handlers_registered: bool = False
         self._active_direction_source_list: list[str] = ["manual_draw"]
+        self._ridge_direction_vector_array: np.ndarray | None = None
+        self._ridge_rotation_angle_deg: float | None = None
+        self._ridge_direction_source: str | None = None
 
         # Debounce timer for reactive updates
         self._update_timer = QTimer(self)
@@ -274,6 +278,7 @@ class RenameTab(TabInterface):
             self._on_set_ridge_direction_clicked
         )
         self.btn_focus_ridge = PushButton(tr("page.rename.btn.focus_ridge"))
+        self.btn_focus_ridge.clicked.connect(self._on_focus_ridge_clicked)
 
         self.spin_strength = SpinBox()
         self.spin_strength.setRange(1, 100)
@@ -403,6 +408,45 @@ class RenameTab(TabInterface):
         self._sync_boundary_direction_layer(source_key)
         self._schedule_update("ridge")
 
+    def _set_ridge_direction_state(
+        self,
+        direction_vector_array: np.ndarray,
+        source_key: str,
+    ) -> None:
+        """Store ridge direction vector, source, and derived rotation angle."""
+        unit_vec = normalize_direction_vector(direction_vector_array)
+        self._ridge_direction_vector_array = unit_vec
+        self._ridge_rotation_angle_deg = compute_rotation_angle_deg(unit_vec)
+        self._ridge_direction_source = source_key
+
+    def _ask_apply_rotation(self) -> bool:
+        """Ask user whether current ridge direction should rotate map now."""
+        msg_box = MessageBox(
+            tr("page.rename.msg.rotation_confirm_title"),
+            tr("page.rename.msg.rotation_confirm_content"),
+            self.window(),
+        )
+        msg_box.yesButton.setText(tr("page.rename.btn.apply_rotation_now"))
+        msg_box.cancelButton.setText(tr("cancel"))
+        return bool(msg_box.exec())
+
+    def _apply_saved_rotation(self) -> bool:
+        """Apply stored ridge rotation angle to map canvas."""
+        if self._ridge_rotation_angle_deg is None:
+            InfoBar.warning(
+                title=tr("warning"),
+                content=tr("page.rename.msg.no_ridge_rotation"),
+                parent=self,
+                duration=2200,
+            )
+            return False
+        self.map_component.map_canvas.set_rotation(self._ridge_rotation_angle_deg)
+        return True
+
+    def _on_focus_ridge_clicked(self) -> None:
+        """Rotate map to follow stored ridge direction angle."""
+        self._apply_saved_rotation()
+
     def _activate_manual_draw_mode(self) -> None:
         """Activate manual draw interaction mode for ridge direction."""
         self._manual_draw_active = True
@@ -462,6 +506,11 @@ class RenameTab(TabInterface):
         if not clear_layer:
             return
         self.map_component.map_canvas.remove_layer("ridge_direction")
+        if self._ridge_direction_source != "manual_draw":
+            return
+        self._ridge_direction_vector_array = None
+        self._ridge_rotation_angle_deg = None
+        self._ridge_direction_source = None
 
     def _build_manual_line_item(self, color_hex: str) -> pg.PlotCurveItem:
         """Create one manual draw line item.
@@ -528,7 +577,10 @@ class RenameTab(TabInterface):
             )
             return True
         self._manual_direction_vector_array = vector_array
+        self._set_ridge_direction_state(vector_array, "manual_draw")
         self._draw_manual_fixed_line()
+        if self._ask_apply_rotation():
+            self._apply_saved_rotation()
         self._schedule_update("ridge")
         return True
 
@@ -655,6 +707,7 @@ class RenameTab(TabInterface):
         except Exception:
             self.map_component.map_canvas.remove_layer("ridge_direction")
             return
+        self._set_ridge_direction_state(end_pt - start_pt, source_key)
         crs_value = None
         if self._input_bundle is not None:
             points_gdf = self._input_bundle.get("points_gdf")
@@ -672,6 +725,8 @@ class RenameTab(TabInterface):
             color="#FF7A00",
             width=2,
         )
+        if self._ask_apply_rotation():
+            self._apply_saved_rotation()
 
     def _sync_manual_direction_layer(self) -> None:
         """Sync manual ridge direction as vector layer in map and layer tree."""

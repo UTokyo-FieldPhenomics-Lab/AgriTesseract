@@ -4,8 +4,35 @@ import numpy as np
 from PySide6.QtCore import Qt
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
+import pytest
 
+from src.gui.tabs import rename_ids
 from src.gui.tabs.rename_ids import RenameTab
+
+
+class _DummyButton:
+    """Dummy dialog button."""
+
+    def setText(self, _text: str) -> None:
+        """No-op setter."""
+
+
+class _FakeMessageBox:
+    """Fake MessageBox that always cancels rotation."""
+
+    def __init__(self, _title: str, _content: str, _parent=None) -> None:
+        self.yesButton = _DummyButton()
+        self.cancelButton = _DummyButton()
+
+    def exec(self) -> bool:
+        """Always return cancel in tests."""
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _mock_rotation_messagebox(monkeypatch):
+    """Patch MessageBox to avoid blocking dialogs during tests."""
+    monkeypatch.setattr(rename_ids, "MessageBox", _FakeMessageBox)
 
 
 def _build_boundary_bundle() -> dict:
