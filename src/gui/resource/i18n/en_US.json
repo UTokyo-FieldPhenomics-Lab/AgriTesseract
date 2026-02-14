@@ -121,6 +121,7 @@
     "page.seedling.msg.sent_to_next": "Points sent to Rename IDs",
 
     "page.rename.group.file": "File",
+    "page.rename.btn.load_points": "Load Points",
     "page.rename.btn.load_dom": "Load DOM",
     "page.rename.btn.load_boundary": "Load Boundary",
     "page.rename.group.ridge": "Ridge Detect",

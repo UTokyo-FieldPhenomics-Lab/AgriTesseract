@@ -121,8 +121,9 @@
     "page.seedling.msg.sent_to_next": "ポイント結果をRename IDsへ送信しました",
 
     "page.rename.group.file": "ファイル",
-    "page.rename.btn.load_dom": "画像読込",
-    "page.rename.btn.load_boundary": "境界読込",
+    "page.rename.btn.load_points": "点を読込",
+    "page.rename.btn.load_dom": "画像を読込",
+    "page.rename.btn.load_boundary": "境界を読込",
     "page.rename.group.ridge": "畝検出",
     "page.rename.tab.file": "ファイル",
     "page.rename.tab.ridge": "畝検出",
