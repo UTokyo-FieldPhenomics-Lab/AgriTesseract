@@ -37,6 +37,7 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.components.map_canvas import LayerBounds
+from src.gui.components.layer_types import LayerType
 from src.gui.config import cfg, tr
 from src.utils.seedling_detect.io import export_inference_outputs
 from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
@@ -1097,7 +1098,7 @@ class SeedlingTab(TabInterface):
             "bounds": LayerBounds(x_min, y_min, x_max, y_max),
         }
         map_canvas._layer_order.append(layer_name)
-        map_canvas.sigLayerAdded.emit(layer_name, "Vector")
+        map_canvas.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
 
     def _current_dom_crs_wkt(self) -> str | None:
         """Read current DOM CRS WKT text for PRJ export."""

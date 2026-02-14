@@ -25,6 +25,7 @@ from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeyEvent, QTransform
 from PySide6.QtWidgets import QMenu, QVBoxLayout, QWidget
 from qfluentwidgets import Theme
+from src.gui.components.layer_types import LayerType
 
 # Move global config to instance level or handle dynamically
 # pg.setConfigOptions(antialias=True)
@@ -424,7 +425,7 @@ class MapCanvas(QWidget):
             # Trigger initial tile load
             self._update_visible_tiles()
 
-            self.sigLayerAdded.emit(layer_name, "Raster")
+            self.sigLayerAdded.emit(layer_name, LayerType.RASTER.value)
             return True
 
         except Exception as e:
@@ -587,7 +588,7 @@ class MapCanvas(QWidget):
                 self._view_box.setRange(rect)
 
             logger.info(f"Loaded vector layer: {layer_name}")
-            self.sigLayerAdded.emit(layer_name, "Vector")
+            self.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
             return True
         except Exception as exc:
             logger.error(f"Failed to load vector layer: {exc}")

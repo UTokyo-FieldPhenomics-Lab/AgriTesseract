@@ -56,3 +56,24 @@ def test_layer_panel_order_syncs_from_map_canvas(qtbot) -> None:
     canvas.update_layer_order(["points", "boundary", "dom"])
 
     assert panel.get_layer_order() == ["points", "boundary", "dom"]
+
+
+def test_layer_panel_uses_distinct_icons_for_raster_and_vector(qtbot) -> None:
+    """Raster and vector icons should remain distinct with title-case types."""
+    map_component = MapComponent()
+    qtbot.addWidget(map_component)
+    panel = map_component.layer_panel
+    panel.add_layer("dom_lower", "raster")
+    panel.add_layer("dom", "Raster")
+    panel.add_layer("boundary", "Vector")
+
+    dom_lower_icon_image = (
+        panel._layers["dom_lower"]["item"].icon(0).pixmap(16, 16).toImage()
+    )
+    dom_icon_image = panel._layers["dom"]["item"].icon(0).pixmap(16, 16).toImage()
+    boundary_icon_image = (
+        panel._layers["boundary"]["item"].icon(0).pixmap(16, 16).toImage()
+    )
+
+    assert dom_icon_image == dom_lower_icon_image
+    assert dom_icon_image != boundary_icon_image

@@ -12,7 +12,7 @@ References
 - dev.notes/04_demo_layer_manage_drag.py: Layer management with drag-drop
 """
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, cast
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -39,6 +39,7 @@ from qfluentwidgets import (
 )
 
 from src.gui.config import tr, cfg
+from src.gui.components.layer_types import LayerType, normalize_layer_type
 from qfluentwidgets import Theme
 import darkdetect
 from pathlib import Path
@@ -203,9 +204,9 @@ class LayerPanel(QWidget):
             0, Qt.CheckState.Checked if visible else Qt.CheckState.Unchecked
         )
 
-        # Set icon based on type (Use text prefix as icon substitute or actual Icon if available)
-        # Using emoji for now as per previous design, but could use FluentIcon
-        if layer_type == "raster":
+        normalized_type = normalize_layer_type(layer_type)
+
+        if normalized_type == LayerType.RASTER:
             item.setText(0, name)
             item.setIcon(0, FIF.IMAGE_EXPORT.icon())
         else:
@@ -216,7 +217,11 @@ class LayerPanel(QWidget):
         self._tree.insertTopLevelItem(0, item)
 
         # Register layer
-        self._layers[name] = {"type": layer_type, "visible": visible, "item": item}
+        self._layers[name] = {
+            "type": normalized_type.value,
+            "visible": visible,
+            "item": item,
+        }
 
         self._tree.blockSignals(False)
         self._tree.setCurrentItem(item)
@@ -225,7 +230,10 @@ class LayerPanel(QWidget):
         self._on_order_changed()
 
         logger.debug(
-            f"Layer added: {name} ({layer_type}). Tree count: {self._tree.topLevelItemCount()}"
+            "Layer added: {} ({}). Tree count: {}",
+            name,
+            normalized_type.value,
+            self._tree.topLevelItemCount(),
         )
 
     def remove_layer(self, name: str) -> bool:
@@ -251,7 +259,10 @@ class LayerPanel(QWidget):
         order = []
         for i in range(self._tree.topLevelItemCount()):
             item = self._tree.topLevelItem(i)
-            name = item.text(0)
+            if item is None:
+                continue
+            item_obj = cast(QTreeWidgetItem, item)
+            name = item_obj.text(0)
             order.append(name)
         return order
 

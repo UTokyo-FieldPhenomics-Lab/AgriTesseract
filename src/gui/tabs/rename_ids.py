@@ -37,6 +37,7 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.components.map_canvas import LayerBounds
+from src.gui.components.layer_types import LayerType
 from src.gui.config import tr
 from src.utils.rename_ids.boundary import (
     align_boundary_crs,
@@ -1025,7 +1026,7 @@ class RenameTab(TabInterface):
             "bounds": LayerBounds(x_min, y_min, x_max, y_max),
         }
         map_canvas._layer_order.append(layer_name)
-        map_canvas.sigLayerAdded.emit(layer_name, "Vector")
+        map_canvas.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
         map_canvas.zoom_to_layer(layer_name)
 
     def _build_points_bundle(

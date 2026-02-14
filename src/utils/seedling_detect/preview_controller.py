@@ -20,6 +20,7 @@ from PySide6.QtGui import (
     QPen,
 )
 from PySide6.QtWidgets import QGraphicsPathItem
+from src.gui.components.layer_types import LayerType
 
 from src.utils.seedling_detect.preview import (
     clamp_preview_size,
@@ -486,7 +487,7 @@ class SeedlingPreviewController(QObject):
             "is_preview": True,
         }
         self._canvas._layer_order.append(PREVIEW_LAYER_NAME)
-        self._canvas.sigLayerAdded.emit(PREVIEW_LAYER_NAME, "Vector")
+        self._canvas.sigLayerAdded.emit(PREVIEW_LAYER_NAME, LayerType.VECTOR.value)
 
     def _clear_preview_layers(self) -> None:
         """Clear preview box and preview-result layers from canvas."""
@@ -604,7 +605,9 @@ class SeedlingPreviewController(QObject):
             "bounds": bounds,
         }
         self._canvas._layer_order.append(PREVIEW_RESULT_LAYER_NAME)
-        self._canvas.sigLayerAdded.emit(PREVIEW_RESULT_LAYER_NAME, "Vector")
+        self._canvas.sigLayerAdded.emit(
+            PREVIEW_RESULT_LAYER_NAME, LayerType.VECTOR.value
+        )
 
     def _register_slice_grid_layer(
         self,
@@ -621,7 +624,7 @@ class SeedlingPreviewController(QObject):
             "bounds": bounds,
         }
         self._canvas._layer_order.append(SLICE_GRID_LAYER_NAME)
-        self._canvas.sigLayerAdded.emit(SLICE_GRID_LAYER_NAME, "Vector")
+        self._canvas.sigLayerAdded.emit(SLICE_GRID_LAYER_NAME, LayerType.VECTOR.value)
 
     def _register_named_layer(
         self,
@@ -637,7 +640,7 @@ class SeedlingPreviewController(QObject):
             "bounds": bounds,
         }
         self._canvas._layer_order.append(layer_name)
-        self._canvas.sigLayerAdded.emit(layer_name, "Vector")
+        self._canvas.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
 
     @staticmethod
     def _polygon_bounds(
