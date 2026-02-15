@@ -40,8 +40,6 @@ from qfluentwidgets import (
 
 from src.gui.components.base_interface import TabInterface
 from src.gui.components.bottom_panel import BottomPanelFigure
-from src.gui.components.map_canvas import LayerBounds
-from src.gui.components.layer_types import LayerType
 from src.gui.config import tr
 from src.utils.rename_ids.boundary import (
     align_boundary_crs,
@@ -1163,27 +1161,16 @@ class RenameTab(TabInterface):
         layer_name = "rename_points"
         map_canvas = self.map_component.map_canvas
         self._remove_map_layer_with_sync_guard(layer_name)
-        scatter_item = pg.ScatterPlotItem(
-            x=xy_array[:, 0],
-            y=xy_array[:, 1],
-            symbol="o",
-            size=7,
-            pen=pg.mkPen(color="#3B82F6", width=1.0),
-            brush=pg.mkBrush(59, 130, 246, 160),
+        map_canvas.add_point_layer(
+            xy_array,
+            layer_name,
+            size=8,
+            fill_color=(255, 59, 48, 180),
+            border_color="#FF3B30",
+            border_width=1.2,
+            z_value=630,
+            replace=True,
         )
-        scatter_item.setZValue(620)
-        map_canvas.add_overlay_item(scatter_item)
-        x_min = float(np.min(xy_array[:, 0]))
-        y_min = float(np.min(xy_array[:, 1]))
-        x_max = float(np.max(xy_array[:, 0]))
-        y_max = float(np.max(xy_array[:, 1]))
-        map_canvas._layers[layer_name] = {
-            "item": scatter_item,
-            "visible": True,
-            "bounds": LayerBounds(x_min, y_min, x_max, y_max),
-        }
-        map_canvas._layer_order.append(layer_name)
-        map_canvas.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
         map_canvas.zoom_to_layer(layer_name)
 
     def _build_points_bundle(

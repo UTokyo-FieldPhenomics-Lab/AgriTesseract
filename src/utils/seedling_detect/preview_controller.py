@@ -334,17 +334,16 @@ class SeedlingPreviewController(QObject):
         points = np.asarray(points_xy, dtype=float)
         if points.size == 0:
             return
-        scatter_item = pg.ScatterPlotItem(
-            x=points[:, 0],
-            y=points[:, 1],
-            symbol="o",
+        self._canvas.add_point_layer(
+            points,
+            RESULT_POINTS_LAYER_NAME,
             size=8,
-            pen=pg.mkPen(color="#FFAA00", width=1.2),
-            brush=pg.mkBrush(255, 120, 0, 180),
+            color="#FFAA00",
+            fill_color=(255, 120, 0, 180),
+            border_width=1.2,
+            z_value=630,
+            replace=True,
         )
-        scatter_item.setZValue(630)
-        self._canvas.add_overlay_item(scatter_item)
-        self._register_named_layer(RESULT_POINTS_LAYER_NAME, scatter_item, [points])
 
     def _show_result_polygon_layer(self, polygons_xy: list[np.ndarray]) -> None:
         """Render SAM3 polygons as colorful result layer."""

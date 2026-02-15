@@ -638,6 +638,199 @@ class MapCanvas(QWidget):
             top=float(top),
         )
 
+    def _normalize_point_array(self, data: Any) -> np.ndarray:
+        """Normalize input data into a point array with shape ``(N, 2)``.
+
+        Parameters
+        ----------
+        data : Any
+            Point source as ``numpy.ndarray``, sequence, or GeoDataFrame.
+
+        Returns
+        -------
+        numpy.ndarray
+            Float point array shaped ``(N, 2)``. Empty on invalid input.
+        """
+        if isinstance(data, np.ndarray):
+            point_array = np.asarray(data, dtype=float)
+        elif HAS_GEOPANDAS and isinstance(data, gpd.GeoDataFrame):
+            xy_list: list[tuple[float, float]] = []
+            for geom in data.geometry:
+                if geom is None or geom.is_empty:
+                    continue
+                if geom.geom_type == "Point":
+                    xy_list.append((float(geom.x), float(geom.y)))
+                    continue
+                if geom.geom_type == "MultiPoint":
+                    for point in geom.geoms:
+                        xy_list.append((float(point.x), float(point.y)))
+            point_array = np.asarray(xy_list, dtype=float)
+        else:
+            point_array = np.asarray(data, dtype=float)
+        if point_array.size == 0:
+            return np.zeros((0, 2), dtype=float)
+        if point_array.ndim != 2 or point_array.shape[1] != 2:
+            logger.error(f"Invalid point array shape: {point_array.shape}")
+            return np.zeros((0, 2), dtype=float)
+        return point_array
+
+    @staticmethod
+    def _resolve_point_style(
+        color: Any,
+        fill_color: Any,
+        border_color: Any,
+        border_width: float,
+    ) -> tuple[Any, Any]:
+        """Resolve point pen and brush from color arguments.
+
+        Parameters
+        ----------
+        color, fill_color, border_color : Any
+            Base color and explicit channel overrides.
+        border_width : float
+            Border width in pixels.
+
+        Returns
+        -------
+        tuple[Any, Any]
+            ``(pen, brush)`` used by ``ScatterPlotItem``.
+        """
+        default_border = "#FFAA00"
+        default_fill = (255, 120, 0, 180)
+        base_color = color if color is not None else default_border
+        final_border = border_color if border_color is not None else base_color
+        final_fill = fill_color if fill_color is not None else base_color
+        if color is None and fill_color is None and border_color is None:
+            return pg.mkPen(
+                color=default_border, width=float(border_width)
+            ), pg.mkBrush(*default_fill)
+        pen_obj = pg.mkPen(color=final_border, width=float(border_width))
+        brush_obj = pg.mkBrush(final_fill)
+        return pen_obj, brush_obj
+
+    @staticmethod
+    def _calc_bounds_from_points(points_xy: np.ndarray) -> Optional[LayerBounds]:
+        """Calculate bounds from point coordinates.
+
+        Parameters
+        ----------
+        points_xy : numpy.ndarray
+            Point array with shape ``(N, 2)``.
+
+        Returns
+        -------
+        LayerBounds | None
+            Point extent bounds or ``None`` when array is empty.
+        """
+        if points_xy.size == 0:
+            return None
+        return LayerBounds(
+            left=float(np.min(points_xy[:, 0])),
+            bottom=float(np.min(points_xy[:, 1])),
+            right=float(np.max(points_xy[:, 0])),
+            top=float(np.max(points_xy[:, 1])),
+        )
+
+    def _register_overlay_layer(
+        self,
+        layer_name: str,
+        item: Any,
+        bounds: Optional[LayerBounds],
+        replace: bool,
+    ) -> None:
+        """Register one overlay item into the layer registry.
+
+        Parameters
+        ----------
+        layer_name : str
+            Name for layer tree display.
+        item : Any
+            Graphics item already attached to the canvas.
+        bounds : LayerBounds | None
+            Extent info for zoom/fit behavior.
+        replace : bool
+            Whether existing same-name layer should be removed first.
+        """
+        if layer_name in self._layers:
+            if not replace:
+                raise ValueError(f"Layer already exists: {layer_name}")
+            self.remove_layer(layer_name)
+        self._layers[layer_name] = {
+            "item": item,
+            "visible": True,
+            "bounds": bounds,
+        }
+        self._layer_order.append(layer_name)
+        self.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
+
+    def add_point_layer(
+        self,
+        data: Any,
+        layer_name: str,
+        *,
+        symbol: str = "o",
+        size: float = 8.0,
+        color: Any = None,
+        fill_color: Any = None,
+        border_color: Any = None,
+        border_width: float = 1.2,
+        z_value: float = 620.0,
+        replace: bool = True,
+        zoom_on_add: bool = False,
+    ) -> bool:
+        """Add a point layer from XY array or point GeoDataFrame.
+
+        Parameters
+        ----------
+        data : Any
+            Input points with shape ``(N, 2)`` or point GeoDataFrame.
+        layer_name : str
+            Layer name shown in the layer panel.
+        symbol, size : str, float
+            Scatter marker symbol and marker size.
+        color, fill_color, border_color : Any, optional
+            Color style where ``color`` sets both channels by default.
+        border_width : float, optional
+            Marker border width in pixels.
+        z_value : float, optional
+            Draw order for the scatter item.
+        replace : bool, optional
+            Remove same-name layer before adding.
+        zoom_on_add : bool, optional
+            Zoom to layer extent right after add.
+
+        Returns
+        -------
+        bool
+            True when layer is added successfully.
+        """
+        try:
+            points_xy = self._normalize_point_array(data)
+            if points_xy.size == 0:
+                logger.warning("No point geometry to draw")
+                return False
+            pen_obj, brush_obj = self._resolve_point_style(
+                color, fill_color, border_color, border_width
+            )
+            scatter_item = pg.ScatterPlotItem(
+                x=points_xy[:, 0],
+                y=points_xy[:, 1],
+                symbol=symbol,
+                size=float(size),
+                pen=pen_obj,
+                brush=brush_obj,
+            )
+            scatter_item.setZValue(float(z_value))
+            self.add_overlay_item(scatter_item)
+            bounds = self._calc_bounds_from_points(points_xy)
+            self._register_overlay_layer(layer_name, scatter_item, bounds, replace)
+            if zoom_on_add:
+                self.zoom_to_layer(layer_name)
+            return True
+        except Exception as exc:
+            logger.error(f"Failed to add point layer: {exc}")
+            return False
+
     def add_vector_layer(
         self, data: Any, layer_name: str, color: str = "g", width: int = 2
     ) -> bool:

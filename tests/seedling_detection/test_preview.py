@@ -1,13 +1,18 @@
 """Tests for preview-box geometry helpers."""
 
 from affine import Affine
+from src.gui.components.map_canvas import MapCanvas
 
 from src.utils.seedling_detect.preview import (
     clamp_preview_size,
     pixel_square_bounds_from_geo_center,
     preview_bounds_from_center,
 )
-from src.utils.seedling_detect.preview_controller import result_instance_color
+from src.utils.seedling_detect.preview_controller import (
+    RESULT_POINTS_LAYER_NAME,
+    SeedlingPreviewController,
+    result_instance_color,
+)
 
 
 def test_clamp_preview_size_limits_range() -> None:
@@ -43,3 +48,30 @@ def test_result_instance_color_is_bright_and_distinct() -> None:
     assert color_a.getHsv()[1] >= 200
     assert color_a.getHsv()[2] >= 220
     assert color_a.hue() != color_b.hue()
+
+
+def test_show_result_points_layer_routes_through_add_point_layer(qtbot) -> None:
+    """Result points should be rendered via canvas point-layer API."""
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+    controller = SeedlingPreviewController(canvas)
+    call_log: list[dict[str, object]] = []
+
+    def _spy_add_point_layer(data, layer_name, **kwargs):
+        call_log.append(
+            {
+                "data": data,
+                "layer_name": layer_name,
+                "kwargs": kwargs,
+            }
+        )
+        return True
+
+    canvas.add_point_layer = _spy_add_point_layer
+
+    controller._show_result_points_layer(
+        points_xy=[[1.0, 2.0], [3.0, 4.0]],
+    )
+
+    assert len(call_log) == 1
+    assert call_log[0]["layer_name"] == RESULT_POINTS_LAYER_NAME
