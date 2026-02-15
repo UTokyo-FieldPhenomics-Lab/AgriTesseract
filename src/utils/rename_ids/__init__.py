@@ -11,6 +11,11 @@ from src.utils.rename_ids.ridge_density import (
     detect_ridge_peaks,
     build_ridge_lines_from_peaks,
 )
+from src.utils.rename_ids.ridge_ordering import (
+    build_ridge_intervals,
+    assign_points_to_ridges,
+    build_ordering_result,
+)
 
 __all__ = [
     "compute_rotation_angle_deg",
@@ -20,4 +25,7 @@ __all__ = [
     "build_density_histogram",
     "detect_ridge_peaks",
     "build_ridge_lines_from_peaks",
+    "build_ridge_intervals",
+    "assign_points_to_ridges",
+    "build_ordering_result",
 ]
