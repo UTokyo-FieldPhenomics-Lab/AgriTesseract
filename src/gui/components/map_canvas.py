@@ -15,6 +15,7 @@ References
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
 import darkdetect
@@ -709,6 +710,81 @@ class MapCanvas(QWidget):
         return pen_obj, brush_obj
 
     @staticmethod
+    def _is_color_sequence(value: Any) -> bool:
+        """Return whether one style value is a per-point color sequence."""
+        if value is None:
+            return False
+        if isinstance(value, (str, bytes)):
+            return False
+        return isinstance(value, Sequence) or isinstance(value, np.ndarray)
+
+    def _expand_point_colors(
+        self,
+        color: Any,
+        fill_color: Any,
+        border_color: Any,
+        point_count: int,
+    ) -> tuple[list[Any], list[Any]]:
+        """Expand style inputs to per-point fill and border colors."""
+        default_fill = (255, 120, 0, 180)
+        default_border = "#FFAA00"
+        fill_values = self._expand_one_color_channel(
+            channel_value=fill_color,
+            base_value=color,
+            default_value=default_fill,
+            point_count=point_count,
+        )
+        border_values = self._expand_one_color_channel(
+            channel_value=border_color,
+            base_value=color,
+            default_value=default_border,
+            point_count=point_count,
+        )
+        return fill_values, border_values
+
+    @staticmethod
+    def _expand_one_color_channel(
+        channel_value: Any,
+        base_value: Any,
+        default_value: Any,
+        point_count: int,
+    ) -> list[Any]:
+        """Expand one color channel to per-point values."""
+        if channel_value is None:
+            channel_value = base_value if base_value is not None else default_value
+        if MapCanvas._is_color_sequence(channel_value):
+            color_list = list(channel_value)
+            if len(color_list) != point_count:
+                raise ValueError("Per-point color list length must match point count")
+            return color_list
+        return [channel_value for _ in range(point_count)]
+
+    @staticmethod
+    def _build_scatter_spots(
+        points_xy: np.ndarray,
+        symbol: str,
+        size: float,
+        fill_values: list[Any],
+        border_values: list[Any],
+        border_width: float,
+    ) -> list[dict[str, Any]]:
+        """Build scatter spots carrying per-point pen/brush styles."""
+        spots: list[dict[str, Any]] = []
+        for index, point_xy in enumerate(points_xy):
+            spots.append(
+                {
+                    "pos": (float(point_xy[0]), float(point_xy[1])),
+                    "symbol": symbol,
+                    "size": float(size),
+                    "brush": pg.mkBrush(fill_values[index]),
+                    "pen": pg.mkPen(
+                        color=border_values[index], width=float(border_width)
+                    ),
+                }
+            )
+        return spots
+
+    @staticmethod
     def _calc_bounds_from_points(points_xy: np.ndarray) -> Optional[LayerBounds]:
         """Calculate bounds from point coordinates.
 
@@ -809,17 +885,41 @@ class MapCanvas(QWidget):
             if points_xy.size == 0:
                 logger.warning("No point geometry to draw")
                 return False
-            pen_obj, brush_obj = self._resolve_point_style(
-                color, fill_color, border_color, border_width
+            has_per_point_colors = any(
+                self._is_color_sequence(value)
+                for value in (color, fill_color, border_color)
             )
-            scatter_item = pg.ScatterPlotItem(
-                x=points_xy[:, 0],
-                y=points_xy[:, 1],
-                symbol=symbol,
-                size=float(size),
-                pen=pen_obj,
-                brush=brush_obj,
-            )
+            if has_per_point_colors:
+                fill_values, border_values = self._expand_point_colors(
+                    color=color,
+                    fill_color=fill_color,
+                    border_color=border_color,
+                    point_count=int(points_xy.shape[0]),
+                )
+                spots = self._build_scatter_spots(
+                    points_xy=points_xy,
+                    symbol=symbol,
+                    size=float(size),
+                    fill_values=fill_values,
+                    border_values=border_values,
+                    border_width=float(border_width),
+                )
+                scatter_item = pg.ScatterPlotItem(spots=spots)
+            else:
+                pen_obj, brush_obj = self._resolve_point_style(
+                    color,
+                    fill_color,
+                    border_color,
+                    border_width,
+                )
+                scatter_item = pg.ScatterPlotItem(
+                    x=points_xy[:, 0],
+                    y=points_xy[:, 1],
+                    symbol=symbol,
+                    size=float(size),
+                    pen=pen_obj,
+                    brush=brush_obj,
+                )
             scatter_item.setZValue(float(z_value))
             self.add_overlay_item(scatter_item)
             bounds = self._calc_bounds_from_points(points_xy)

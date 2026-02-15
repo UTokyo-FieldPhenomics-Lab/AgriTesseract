@@ -50,3 +50,40 @@ def test_add_point_layer_replaces_existing_layer_without_duplicate_order(qtbot) 
     canvas.add_point_layer(np.asarray([[1.0, 1.0]], dtype=float), "pts")
 
     assert canvas._layer_order.count("pts") == 1
+
+
+def test_add_point_layer_supports_per_point_color_lists(qtbot) -> None:
+    """Per-point fill and border color lists should apply per marker."""
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+
+    ok = canvas.add_point_layer(
+        np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+        "pts",
+        fill_color=["#ff0000", "#00ff00"],
+        border_color=["#0000ff", "#ff00ff"],
+    )
+
+    assert ok is True
+    item = canvas._layers["pts"]["item"]
+    point_items = item.points()
+    assert len(point_items) == 2
+    assert point_items[0].brush().color().name().lower() == "#ff0000"
+    assert point_items[1].brush().color().name().lower() == "#00ff00"
+    assert point_items[0].pen().color().name().lower() == "#0000ff"
+    assert point_items[1].pen().color().name().lower() == "#ff00ff"
+
+
+def test_add_point_layer_rejects_invalid_color_list_length(qtbot) -> None:
+    """Per-point color lists must match point count."""
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+
+    ok = canvas.add_point_layer(
+        np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+        "pts",
+        fill_color=["#ff0000"],
+    )
+
+    assert ok is False
+    assert "pts" not in canvas._layers
