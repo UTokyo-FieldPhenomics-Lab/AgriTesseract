@@ -82,3 +82,34 @@ def test_ordering_stats_summary_text_updates_after_run(qtbot) -> None:
     assert "4" in stats_text
     assert "1" in stats_text
     assert "5" in stats_text
+
+
+def test_ridge_update_does_not_run_ordering_while_not_in_ordering_tab(qtbot) -> None:
+    """Ridge refresh should not execute ordering pipeline outside ordering tab."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_points_bundle())
+    tab._set_ridge_direction_state(np.asarray([1.0, 0.0], dtype=np.float64), "x")
+
+    tab._run_ridge_diagnostics(tab._current_ridge_params(), apply_focus=False)
+
+    assert "ordering_result_gdf" not in tab._input_bundle
+    assert "ordering_stats" not in tab._input_bundle
+
+
+def test_switch_to_ordering_tab_triggers_ordering_run(qtbot) -> None:
+    """Entering ordering tab should run ordering once when inputs are ready."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_points_bundle())
+    tab._ridge_direction_vector_array = np.asarray([1.0, 0.0], dtype=np.float64)
+    tab._last_ridge_payload = {
+        "ridge_peaks": {
+            "peak_x": np.asarray([-2.0, 2.0], dtype=np.float64),
+        }
+    }
+
+    tab.stacked_widget.setCurrentIndex(2)
+
+    assert "ordering_result_gdf" in tab._input_bundle
+    assert "ordering_stats" in tab._input_bundle

@@ -288,14 +288,38 @@ class RenameTab(TabInterface):
         widget = self.stacked_widget.widget(index)
         if widget is None:
             return
-        self.nav.setCurrentItem(widget.objectName())
-        qrouter.push(self.stacked_widget, widget.objectName())
-        if widget.objectName() != "renameRidgeTab":
+        object_name = widget.objectName()
+        self.nav.setCurrentItem(object_name)
+        qrouter.push(self.stacked_widget, object_name)
+        if object_name == "renameRidgeTab":
+            if self._ridge_direction_vector_array is None:
+                return
+            self._run_ridge_diagnostics(self._current_ridge_params(), apply_focus=False)
+            return
+        self.map_component.hide_panel()
+        if not self._is_ordering_tab_active():
+            return
+        if not self._is_ordering_ready():
             self.map_component.hide_panel()
             return
+        self._run_ordering_diagnostics(self._current_ordering_params())
+
+    def _is_ordering_tab_active(self) -> bool:
+        """Return whether Ordering top-tab is currently visible."""
+        current_widget = self.stacked_widget.currentWidget()
+        if current_widget is None:
+            return False
+        return current_widget.objectName() == "renameOrderingTab"
+
+    def _is_ordering_ready(self) -> bool:
+        """Return whether ordering has required inputs from ridge stage."""
+        if self._input_bundle is None:
+            return False
         if self._ridge_direction_vector_array is None:
-            return
-        self._run_ridge_diagnostics(self._current_ridge_params(), apply_focus=False)
+            return False
+        ridge_peak_payload = self._last_ridge_payload.get("ridge_peaks", {})
+        ridge_peaks = np.asarray(ridge_peak_payload.get("peak_x", np.asarray([])))
+        return ridge_peaks.ndim == 1 and ridge_peaks.size > 0
 
     def hideEvent(self, event: QHideEvent) -> None:
         """Auto-hide bottom diagnostics when Rename tab becomes hidden."""
@@ -1566,7 +1590,8 @@ class RenameTab(TabInterface):
         elif self._pending_update_type == "ordering":
             params = self._current_ordering_params()
             self.sigOrderingParamsChanged.emit(params)
-            self._run_ordering_diagnostics(params)
+            if self._is_ordering_tab_active():
+                self._run_ordering_diagnostics(params)
 
         elif self._pending_update_type == "numbering":
             params = {"format_index": self.combo_format.currentIndex()}
@@ -1605,7 +1630,6 @@ class RenameTab(TabInterface):
         )
         self._last_ridge_payload = ridge_payload
         self._refresh_ordering_ui_state()
-        self._run_ordering_diagnostics(self._current_ordering_params())
         if direction_vector is not None and apply_focus:
             self._focus_ridge_runtime()
 
