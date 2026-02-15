@@ -154,3 +154,68 @@
 3. 输出字段仅包含分垄归属（`ridge_id`、`is_inlier`），不包含排序字段。
 4. RANSAC 开关与参数启禁状态正确。
 5. Ordering 输出可直接被模块06消费，无需额外清洗。
+
+---
+
+## 补充任务（UI 触发时机与单图层着色）
+
+### Task 7：仅在 Ordering Tab 可见时执行 ordering 计算
+
+**Files:**
+- Modify: `src/gui/tabs/rename_ids.py`
+- Test: `tests/rename_ids/test_ordering_ui_state.py`
+
+**Steps:**
+1. 在 `RenameTab` 增加“当前是否处于 Ordering 顶部 tab”的判断逻辑。
+2. Ridge 参数更新流程只刷新 ridge payload 与 ordering UI 可用态，不触发 ordering 计算。
+3. 仅当当前 tab 为 Ordering 时，Ordering 参数更新才触发计算。
+4. 从其他 tab 切到 Ordering tab 时执行一次 ordering 首算（若前置条件满足）。
+5. 补充测试：在 Ridge tab 调参不应产生 ordering 结果图层；切换到 Ordering tab 后再产生。
+
+**Verify:**
+- `uv run pytest tests/rename_ids/test_ordering_ui_state.py -v`
+
+### Task 8：MapCanvas 点图层支持按点颜色列表渲染
+
+**Files:**
+- Modify: `src/gui/components/map_canvas.py`
+- Test: `tests/map_canvas/test_point_layer_api.py`
+
+**Steps:**
+1. 为 `add_point_layer`： `color`, `fill_color` 与 `border_color`允许 单个颜色输入 和 长度应与点数一致的颜色列表。
+2. 保持原有单色参数 `color/fill_color/border_color` 完全兼容。
+3. 当提供颜色列表时，采用按点样式渲染单一 `ScatterPlotItem`（单图层）。
+4. 补充测试：按点颜色列表生效、长度不匹配报错、旧接口行为不变。
+
+**Verify:**
+- `uv run pytest tests/map_canvas/test_point_layer_api.py -v`
+
+### Task 9：Ordering 结果改为单图层 `ordering_points`
+
+**Files:**
+- Modify: `src/utils/rename_ids/ridge_ordering_controller.py`
+- Modify: `src/gui/tabs/rename_ids.py`
+- Test: `tests/rename_ids/test_ridge_ordering_controller.py`
+
+**Steps:**
+1. 将 `RidgeOrderingController` 的多图层输出（`ordering_ridge_{n}`）改为单图层输出 `ordering_points`。
+2. 基于 `ridge_id` 构建稳定颜色映射，ignored 点去除fill color, border color使用灰色。
+3. 调用扩展后的 `add_point_layer` 传入按点颜色列表，保持单图层但多颜色显示。
+4. 更新测试断言为单图层命名与单图层多颜色行为。
+
+**Verify:**
+- `uv run pytest tests/rename_ids/test_ridge_ordering_controller.py -v`
+
+### Task 10：补充回归验证
+
+**Files:**
+- Test: `tests/rename_ids/test_ordering_end_to_end.py`
+
+**Steps:**
+1. 更新端到端测试，断言 `ordering_points` 存在且契约字段完整。
+2. 断言 ignored 规则稳定：`ridge_id=-1` 且 `is_inlier=False`。
+3. 运行 rename_ids 全量回归与项目全量回归。
+
+**Verify:**
+- `uv run pytest tests/rename_ids -v`
+- `uv run pytest`
