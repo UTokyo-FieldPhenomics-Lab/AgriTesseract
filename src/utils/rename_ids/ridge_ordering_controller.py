@@ -19,10 +19,9 @@ from src.utils.rename_ids.ridge_ordering import (
 class RidgeOrderingController:
     """Drive ordering result generation and map-layer coloring updates."""
 
-    def __init__(self, map_canvas: Any, layer_prefix: str = "ordering_ridge") -> None:
+    def __init__(self, map_canvas: Any, layer_name: str = "ordering_points") -> None:
         self._map_canvas = map_canvas
-        self._layer_prefix = layer_prefix
-        self._ignored_layer_name = f"{layer_prefix}_ignored"
+        self._layer_name = layer_name
 
     def update(
         self,
@@ -82,39 +81,13 @@ class RidgeOrderingController:
         if len(result_gdf) == 0:
             return
         self._map_canvas.set_layer_visibility("rename_points", False)
-        ignored_mask = result_gdf["ridge_id"].to_numpy() < 0
-        ignored_gdf = result_gdf.loc[ignored_mask]
-        if len(ignored_gdf) > 0:
-            self._map_canvas.add_point_layer(
-                ignored_gdf,
-                self._ignored_layer_name,
-                size=7,
-                fill_color=(156, 163, 175, 170),
-                border_color="#4B5563",
-                border_width=1.4,
-                z_value=640,
-                replace=True,
-            )
-        ridge_values = sorted(
-            int(value)
-            for value in np.unique(result_gdf["ridge_id"].to_numpy())
-            if value >= 0
-        )
-        for ridge_id in ridge_values:
-            ridge_gdf = result_gdf.loc[result_gdf["ridge_id"] == ridge_id]
-            self._add_one_ridge_layer(ridge_id, ridge_gdf)
-
-    def _add_one_ridge_layer(self, ridge_id: int, ridge_gdf: gpd.GeoDataFrame) -> None:
-        """Render one ridge point subset using a stable color."""
-        if len(ridge_gdf) == 0:
-            return
-        fill_rgba, border_hex = _stable_ridge_color(ridge_id)
+        fill_values, border_values = _build_point_colors(result_gdf)
         self._map_canvas.add_point_layer(
-            ridge_gdf,
-            f"{self._layer_prefix}_{ridge_id}",
+            result_gdf,
+            self._layer_name,
             size=7,
-            fill_color=fill_rgba,
-            border_color=border_hex,
+            fill_color=fill_values,
+            border_color=border_values,
             border_width=1.2,
             z_value=645,
             replace=True,
@@ -123,8 +96,9 @@ class RidgeOrderingController:
     def _remove_existing_layers(self) -> None:
         """Remove previously rendered ordering layers by prefix."""
         layer_names = list(self._map_canvas.get_layer_names())
+        legacy_prefix = "ordering_ridge_"
         for layer_name in layer_names:
-            if layer_name.startswith(f"{self._layer_prefix}_"):
+            if layer_name == self._layer_name or layer_name.startswith(legacy_prefix):
                 self._map_canvas.remove_layer(layer_name)
 
     def _clear_outputs(self, points_gdf: gpd.GeoDataFrame) -> dict[str, Any]:
@@ -195,3 +169,19 @@ def _stable_ridge_color(ridge_id: int) -> tuple[tuple[int, int, int, int], str]:
         ((20, 184, 166, 180), "#0F766E"),
     ]
     return palette[ridge_id % len(palette)]
+
+
+def _build_point_colors(result_gdf: gpd.GeoDataFrame) -> tuple[list[Any], list[Any]]:
+    """Build per-point fill/border colors based on ridge assignment."""
+    ridge_values = np.asarray(result_gdf["ridge_id"].to_numpy(), dtype=np.int64)
+    fill_values: list[Any] = []
+    border_values: list[Any] = []
+    for ridge_id in ridge_values:
+        if ridge_id < 0:
+            fill_values.append((0, 0, 0, 0))
+            border_values.append("#6B7280")
+            continue
+        fill_rgba, border_hex = _stable_ridge_color(int(ridge_id))
+        fill_values.append(fill_rgba)
+        border_values.append(border_hex)
+    return fill_values, border_values

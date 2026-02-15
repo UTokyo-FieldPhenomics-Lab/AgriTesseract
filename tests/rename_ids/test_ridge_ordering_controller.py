@@ -15,7 +15,7 @@ class _FakeOrderingMapCanvas:
 
     def __init__(self) -> None:
         self.layer_names: list[str] = ["rename_points"]
-        self.add_calls: list[str] = []
+        self.add_calls: list[tuple[str, dict]] = []
         self.remove_calls: list[str] = []
         self.visibility_calls: list[tuple[str, bool]] = []
 
@@ -28,8 +28,8 @@ class _FakeOrderingMapCanvas:
             self.layer_names.remove(layer_name)
         return True
 
-    def add_point_layer(self, _data, layer_name: str, **_kwargs) -> bool:
-        self.add_calls.append(layer_name)
+    def add_point_layer(self, _data, layer_name: str, **kwargs) -> bool:
+        self.add_calls.append((layer_name, kwargs))
         if layer_name not in self.layer_names:
             self.layer_names.append(layer_name)
         return True
@@ -78,9 +78,9 @@ def test_ordering_controller_builds_result_and_colored_layers() -> None:
     assert stats["total_points"] == 5
     assert stats["assigned_points"] == 4
     assert stats["ignored_points"] == 1
-    assert "ordering_ridge_0" in map_canvas.add_calls
-    assert "ordering_ridge_1" in map_canvas.add_calls
-    assert "ordering_ridge_ignored" in map_canvas.add_calls
+    assert map_canvas.add_calls[0][0] == "ordering_points"
+    assert "fill_color" in map_canvas.add_calls[0][1]
+    assert "border_color" in map_canvas.add_calls[0][1]
     assert ("rename_points", False) in map_canvas.visibility_calls
 
 
@@ -108,6 +108,7 @@ def test_ordering_params_update_triggers_tab_controller_and_outputs(qtbot) -> No
             "peak_x": np.asarray([-2.0, 2.0], dtype=np.float64),
         }
     }
+    tab.stacked_widget.setCurrentIndex(2)
     tab.spin_buffer.setValue(0.8)
     tab._pending_update_type = "ordering"
     tab._on_parameter_update_timeout()
@@ -118,5 +119,4 @@ def test_ordering_params_update_triggers_tab_controller_and_outputs(qtbot) -> No
     assert ordering_stats["ignored_points"] == 1
     assert "ordering_result_gdf" in tab._input_bundle
     layer_names = tab.map_component.map_canvas.get_layer_names()
-    assert "ordering_ridge_0" in layer_names
-    assert "ordering_ridge_1" in layer_names
+    assert "ordering_points" in layer_names
