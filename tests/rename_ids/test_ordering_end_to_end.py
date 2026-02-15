@@ -117,6 +117,7 @@ def test_ordering_end_to_end_contract_and_stats_consistency() -> None:
     result_gdf = ordering_payload["ordering_result_gdf"]
     stats = ordering_payload["ordering_stats"]
 
+    assert "ordering_points" in map_canvas.get_layer_names()
     assert {"fid", "ridge_id", "is_inlier", "geometry"} <= set(result_gdf.columns)
     assert len(result_gdf) == len(points_gdf)
     assert stats["total_points"] == len(points_gdf)
