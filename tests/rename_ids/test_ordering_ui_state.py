@@ -35,6 +35,11 @@ def _build_points_bundle() -> dict:
     }
 
 
+def _ordered_subset(layer_names: list[str], priority: list[str]) -> list[str]:
+    """Return existing layers ordered by one priority list."""
+    return [name for name in priority if name in layer_names]
+
+
 def test_ordering_controls_disabled_without_ridge_peaks(qtbot) -> None:
     """Ordering controls should stay disabled before ridge peaks are available."""
     tab = RenameTab()
@@ -113,3 +118,41 @@ def test_switch_to_ordering_tab_triggers_ordering_run(qtbot) -> None:
 
     assert "ordering_result_gdf" in tab._input_bundle
     assert "ordering_stats" in tab._input_bundle
+
+
+def test_switch_ordering_to_ridge_toggles_layer_visibility_and_order(qtbot) -> None:
+    """Switching tabs should keep deterministic layer order and visibility."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_points_bundle())
+    tab._set_ridge_direction_state(np.asarray([1.0, 0.0], dtype=np.float64), "x")
+    tab._last_ridge_payload = {
+        "ridge_peaks": {
+            "peak_x": np.asarray([-2.0, 2.0], dtype=np.float64),
+        }
+    }
+
+    tab.stacked_widget.setCurrentIndex(2)
+    ordering_order = tab.map_component.map_canvas.get_layer_names()
+    assert ordering_order.index("ordering_points") < ordering_order.index(
+        "rename_points"
+    )
+    if "ridge_detected_lines" in ordering_order:
+        assert ordering_order.index("ordering_points") < ordering_order.index(
+            "ridge_detected_lines"
+        )
+    if "ridge_direction" in ordering_order:
+        assert ordering_order.index("ridge_detected_lines") < ordering_order.index(
+            "ridge_direction"
+        )
+
+    tab.stacked_widget.setCurrentIndex(1)
+    map_canvas = tab.map_component.map_canvas
+    assert map_canvas._layers["ordering_points"]["visible"] is False
+    assert map_canvas._layers["rename_points"]["visible"] is True
+    ridge_order = map_canvas.get_layer_names()
+    assert ridge_order.index("ordering_points") < ridge_order.index("rename_points")
+    if "ridge_detected_lines" in ridge_order:
+        assert ridge_order.index("ridge_detected_lines") < ridge_order.index(
+            "ordering_points"
+        )

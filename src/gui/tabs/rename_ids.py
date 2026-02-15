@@ -291,18 +291,23 @@ class RenameTab(TabInterface):
         object_name = widget.objectName()
         self.nav.setCurrentItem(object_name)
         qrouter.push(self.stacked_widget, object_name)
+        self._sync_layer_visibility_for_tab(object_name)
         if object_name == "renameRidgeTab":
             if self._ridge_direction_vector_array is None:
+                self._sync_layer_order_for_tab(object_name)
                 return
             self._run_ridge_diagnostics(self._current_ridge_params(), apply_focus=False)
+            self._sync_layer_order_for_tab(object_name)
             return
         self.map_component.hide_panel()
         if not self._is_ordering_tab_active():
             return
         if not self._is_ordering_ready():
             self.map_component.hide_panel()
+            self._sync_layer_order_for_tab(object_name)
             return
         self._run_ordering_diagnostics(self._current_ordering_params())
+        self._sync_layer_order_for_tab(object_name)
 
     def _is_ordering_tab_active(self) -> bool:
         """Return whether Ordering top-tab is currently visible."""
@@ -320,6 +325,49 @@ class RenameTab(TabInterface):
         ridge_peak_payload = self._last_ridge_payload.get("ridge_peaks", {})
         ridge_peaks = np.asarray(ridge_peak_payload.get("peak_x", np.asarray([])))
         return ridge_peaks.ndim == 1 and ridge_peaks.size > 0
+
+    def _sync_layer_visibility_for_tab(self, tab_name: str) -> None:
+        """Sync key layer visibility according to current top-tab."""
+        map_canvas = self.map_component.map_canvas
+        if tab_name == "renameRidgeTab":
+            map_canvas.set_layer_visibility("ordering_points", False)
+            map_canvas.set_layer_visibility("rename_points", True)
+            return
+        if tab_name != "renameOrderingTab":
+            return
+        if not self._is_ordering_ready():
+            map_canvas.set_layer_visibility("ordering_points", False)
+            map_canvas.set_layer_visibility("rename_points", True)
+            return
+        map_canvas.set_layer_visibility("ordering_points", True)
+        map_canvas.set_layer_visibility("rename_points", False)
+
+    def _sync_layer_order_for_tab(self, tab_name: str) -> None:
+        """Keep deterministic key layer order per active top-tab."""
+        priority = {
+            "renameRidgeTab": [
+                "ridge_detected_lines",
+                "ordering_points",
+                "ridge_direction",
+                "rename_points",
+            ],
+            "renameOrderingTab": [
+                "ordering_points",
+                "ridge_detected_lines",
+                "ridge_direction",
+                "rename_points",
+            ],
+        }.get(tab_name)
+        if priority is None:
+            return
+        map_canvas = self.map_component.map_canvas
+        current_order = map_canvas.get_layer_names()
+        ordered_names = [name for name in priority if name in current_order]
+        if not ordered_names:
+            return
+        ordered_set = set(ordered_names)
+        remain_names = [name for name in current_order if name not in ordered_set]
+        map_canvas.update_layer_order(ordered_names + remain_names)
 
     def hideEvent(self, event: QHideEvent) -> None:
         """Auto-hide bottom diagnostics when Rename tab becomes hidden."""
@@ -1630,6 +1678,7 @@ class RenameTab(TabInterface):
         )
         self._last_ridge_payload = ridge_payload
         self._refresh_ordering_ui_state()
+        self._sync_layer_order_for_tab("renameRidgeTab")
         if direction_vector is not None and apply_focus:
             self._focus_ridge_runtime()
 
@@ -1659,3 +1708,5 @@ class RenameTab(TabInterface):
         ]
         self._input_bundle["ordering_stats"] = ordering_payload["ordering_stats"]
         self._set_ordering_stats_text(ordering_payload["ordering_stats"])
+        self._sync_layer_visibility_for_tab("renameOrderingTab")
+        self._sync_layer_order_for_tab("renameOrderingTab")
