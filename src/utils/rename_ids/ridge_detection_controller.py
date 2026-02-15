@@ -125,6 +125,29 @@ class RidgeDetectionController:
         self._figure_panel.set_threshold_line(float(threshold_height))
         if len(x_bins) > 0:
             self._figure_panel.set_x_range(float(np.min(x_bins)), float(np.max(x_bins)))
+        y_min, y_max = self._resolve_y_range(counts, peak_heights, threshold_height)
+        self._figure_panel.set_y_range(y_min, y_max)
+
+    def _resolve_y_range(
+        self,
+        counts: np.ndarray,
+        peak_heights: np.ndarray,
+        threshold_height: float,
+    ) -> tuple[float, float]:
+        """Resolve y-range using observed data min/max values."""
+        value_list: list[float] = [float(threshold_height)]
+        if len(counts) > 0:
+            value_list.extend(np.asarray(counts, dtype=np.float64).tolist())
+        if len(peak_heights) > 0:
+            value_list.extend(np.asarray(peak_heights, dtype=np.float64).tolist())
+        if not value_list:
+            return 0.0, 1.0
+        y_min = float(min(value_list))
+        y_max = float(max(value_list))
+        if y_max <= y_min:
+            return y_min - 0.5, y_max + 0.5
+        pad = (y_max - y_min) * 0.05
+        return y_min - pad, y_max + pad
 
     def _replace_overlay(self, lines_gdf: gpd.GeoDataFrame) -> None:
         self._map_canvas.remove_layer(self._overlay_layer_name)

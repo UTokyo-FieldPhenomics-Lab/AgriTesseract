@@ -134,6 +134,8 @@ class MapComponent(QWidget):
         if panel_height <= self._bottom_auto_hide_height_px:
             self.hide_panel()
             return
+        if self.bottom_panel_host.is_panel_content_hidden():
+            self.bottom_panel_host.restore_current_panel()
         if panel_height <= map_height:
             return
         self._clamp_bottom_panel_half_ratio(map_height, panel_height)

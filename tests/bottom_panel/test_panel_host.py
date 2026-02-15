@@ -53,3 +53,20 @@ def test_map_component_bottom_panel_default_collapsed_and_switch(qtbot) -> None:
     _, next_collapsed_height, _ = component.v_splitter.sizes()
     assert next_collapsed_height > 0
     assert next_collapsed_height < expanded_height
+
+
+def test_drag_up_from_collapsed_restores_panel_content(qtbot) -> None:
+    """Dragging panel up after auto-hide should restore stack content."""
+    component = MapComponent()
+    qtbot.addWidget(component)
+
+    diagnostics = QLabel("Diagnostics")
+    component.bottom_panel_host.register_panel("ridge", diagnostics)
+    assert component.show_panel("ridge")
+
+    component.hide_panel()
+    map_height, _, status_height = component.v_splitter.sizes()
+    component.v_splitter.setSizes([map_height - 80, 80, status_height])
+    component._on_vertical_splitter_moved(0, 1)
+
+    assert component.bottom_panel_host._stack.isHidden() is False

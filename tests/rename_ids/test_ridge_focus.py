@@ -91,3 +91,24 @@ def test_ridge_update_timeout_triggers_focus_workflow(qtbot) -> None:
     tab._on_parameter_update_timeout()
 
     assert fit_calls[-1][0] == "rename_points"
+
+
+def test_focus_button_also_refreshes_ridge_panel(qtbot, monkeypatch) -> None:
+    """Focus ridge click should re-run diagnostics for panel sync."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab._ridge_direction_source = "boundary_x"
+    tab._ridge_direction_vector_array = np.asarray([1.0, 0.0], dtype=np.float64)
+    tab._ridge_rotation_angle_deg = -90.0
+
+    calls: list[dict] = []
+
+    def _update(**kwargs):
+        calls.append(kwargs)
+        return {}
+
+    monkeypatch.setattr(tab._ridge_controller, "update", _update)
+    tab._on_focus_ridge_clicked()
+
+    assert len(calls) == 1

@@ -21,6 +21,7 @@ class _FakeFigurePanel:
         self.peaks_y = None
         self.x_range = None
         self.threshold = None
+        self.y_range = None
 
     def clear(self) -> None:
         self.clear_count += 1
@@ -38,6 +39,9 @@ class _FakeFigurePanel:
 
     def set_threshold_line(self, value: float | None) -> None:
         self.threshold = value
+
+    def set_y_range(self, y_min: float, y_max: float) -> None:
+        self.y_range = (y_min, y_max)
 
 
 class _FakeMapCanvas:
@@ -102,6 +106,7 @@ def test_controller_returns_payload_and_updates_overlay() -> None:
     assert figure_panel.curve_x is not None
     assert figure_panel.peaks_x is not None
     assert figure_panel.threshold == 2.0
+    assert figure_panel.y_range is not None
 
 
 def test_controller_replaces_overlay_layer_on_repeated_updates() -> None:

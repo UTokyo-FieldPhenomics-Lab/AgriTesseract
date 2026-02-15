@@ -142,6 +142,24 @@ class BottomPanelHost(QWidget):
         """Hide panel content while keeping host container available."""
         self._stack.hide()
 
+    def restore_current_panel(self) -> bool:
+        """Restore current panel content if one was previously selected.
+
+        Returns
+        -------
+        bool
+            ``True`` when current panel content is visible.
+        """
+        if self._current_name is None:
+            return False
+        panel = self._panels.get(self._current_name)
+        if panel is None:
+            return False
+        self._stack.setCurrentWidget(panel)
+        self._stack.show()
+        self.show()
+        return True
+
     def current_panel_name(self) -> Optional[str]:
         """Return current panel name.
 
@@ -151,6 +169,10 @@ class BottomPanelHost(QWidget):
             Active panel name. ``None`` when no panel has been shown.
         """
         return self._current_name
+
+    def is_panel_content_hidden(self) -> bool:
+        """Return whether panel content stack is currently hidden."""
+        return self._stack.isHidden()
 
 
 class BottomPanelFigure(QWidget):
@@ -273,5 +295,21 @@ class BottomPanelFigure(QWidget):
         self.plot_widget.getViewBox().setXRange(
             float(x_min),
             float(x_max),
+            padding=0.0,
+        )
+
+    def set_y_range(self, y_min: float, y_max: float) -> None:
+        """Set plot visible y-range.
+
+        Parameters
+        ----------
+        y_min : float
+            Lower y bound.
+        y_max : float
+            Upper y bound.
+        """
+        self.plot_widget.getViewBox().setYRange(
+            float(y_min),
+            float(y_max),
             padding=0.0,
         )

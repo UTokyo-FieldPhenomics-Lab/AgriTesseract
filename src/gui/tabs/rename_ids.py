@@ -11,6 +11,7 @@ import pyqtgraph as pg
 from shapely.geometry import LineString, MultiLineString, MultiPoint
 
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QEvent
+from PySide6.QtGui import QHideEvent
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -285,6 +286,17 @@ class RenameTab(TabInterface):
             return
         self.nav.setCurrentItem(widget.objectName())
         qrouter.push(self.stacked_widget, widget.objectName())
+        if widget.objectName() != "renameRidgeTab":
+            self.map_component.hide_panel()
+            return
+        if self._ridge_direction_vector_array is None:
+            return
+        self._run_ridge_diagnostics(self._current_ridge_params(), apply_focus=False)
+
+    def hideEvent(self, event: QHideEvent) -> None:
+        """Auto-hide bottom diagnostics when Rename tab becomes hidden."""
+        self.map_component.hide_panel()
+        super().hideEvent(event)
 
     def _new_command_bar(self) -> CommandBar:
         """Create command bar with display style."""
@@ -501,10 +513,13 @@ class RenameTab(TabInterface):
         return not boundary_gdf.empty
 
     def _set_ridge_controls_enabled(self, enabled: bool) -> None:
-        """Set enabled state for all ridge tab controls."""
+        """Set enabled state for ridge source and action controls."""
         self.combo_direction.setEnabled(enabled)
         self.btn_set_ridge_direction.setEnabled(enabled)
         self.btn_focus_ridge.setEnabled(enabled)
+
+    def _set_ridge_param_controls_enabled(self, enabled: bool) -> None:
+        """Set enabled state for ridge numeric parameter controls."""
         self.spin_strength.setEnabled(enabled)
         self.spin_distance.setEnabled(enabled)
         self.spin_height.setEnabled(enabled)
@@ -558,6 +573,8 @@ class RenameTab(TabInterface):
         has_boundary = self._has_boundary_input()
         self._set_direction_source_options(has_boundary=has_boundary)
         self._set_ridge_controls_enabled(has_points)
+        has_direction = self._ridge_direction_vector_array is not None
+        self._set_ridge_param_controls_enabled(has_points and has_direction)
         if has_points:
             return
         self._deactivate_manual_draw_mode(clear_vector=True)
@@ -566,9 +583,13 @@ class RenameTab(TabInterface):
         """Handle ridge direction source change and cleanup transitions."""
         source_key = self._current_direction_source()
         if source_key == "manual_draw":
+            self._ridge_direction_source = "manual_draw"
+            self._ridge_direction_vector_array = None
+            self._ridge_rotation_angle_deg = None
             self._reset_manual_draw_state(clear_layer=True)
             if self.btn_set_ridge_direction.isChecked():
                 self._activate_manual_draw_mode()
+            self._refresh_ridge_ui_state()
             self._schedule_update("ridge")
             return
         if self.btn_set_ridge_direction.isChecked():
@@ -588,6 +609,7 @@ class RenameTab(TabInterface):
         self._ridge_direction_vector_array = unit_vec
         self._ridge_rotation_angle_deg = compute_rotation_angle_deg(unit_vec)
         self._ridge_direction_source = source_key
+        self._refresh_ridge_ui_state()
 
     def _ask_apply_rotation(self) -> bool:
         """Ask user whether current ridge direction should rotate map now."""
@@ -615,7 +637,9 @@ class RenameTab(TabInterface):
 
     def _on_focus_ridge_clicked(self) -> None:
         """Rotate map to follow stored ridge direction angle."""
-        self._focus_ridge_runtime()
+        if not self._focus_ridge_runtime():
+            return
+        self._run_ridge_diagnostics(self._current_ridge_params(), apply_focus=False)
 
     def _focus_ridge_runtime(self) -> bool:
         """Apply ridge focus pipeline: rotation then x-axis fit.
@@ -908,7 +932,11 @@ class RenameTab(TabInterface):
         try:
             start_pt, end_pt = self._compute_boundary_direction_segment(source_key)
         except Exception:
+            self._ridge_direction_source = None
+            self._ridge_direction_vector_array = None
+            self._ridge_rotation_angle_deg = None
             self._remove_map_layer_with_sync_guard("ridge_direction")
+            self._refresh_ridge_ui_state()
             return
         self._set_ridge_direction_state(end_pt - start_pt, source_key)
         crs_value = None
@@ -1466,22 +1494,26 @@ class RenameTab(TabInterface):
         self._pending_update_type = update_type
         self._update_timer.start()
 
+    def _current_ridge_params(self) -> dict[str, Any]:
+        """Build current ridge parameter payload from UI state."""
+        return {
+            "ridge_direction_source": self._ridge_direction_source,
+            "ridge_direction_vector": self._ridge_direction_vector_array,
+            "rotation_angle_deg": self._ridge_rotation_angle_deg,
+            "strength": self.spin_strength.value(),
+            "distance": self.spin_distance.value(),
+            "height": self.spin_height.value(),
+        }
+
     def _on_parameter_update_timeout(self):
         """Timer finished, emit the update signal."""
         if not self._pending_update_type:
             return
 
         if self._pending_update_type == "ridge":
-            params = {
-                "ridge_direction_source": self._ridge_direction_source,
-                "ridge_direction_vector": self._ridge_direction_vector_array,
-                "rotation_angle_deg": self._ridge_rotation_angle_deg,
-                "strength": self.spin_strength.value(),
-                "distance": self.spin_distance.value(),
-                "height": self.spin_height.value(),
-            }
+            params = self._current_ridge_params()
             self.sigRidgeParamsChanged.emit(params)
-            self._run_ridge_diagnostics(params)
+            self._run_ridge_diagnostics(params, apply_focus=True)
 
         elif self._pending_update_type == "ordering":
             params = {
@@ -1498,7 +1530,11 @@ class RenameTab(TabInterface):
 
         self._pending_update_type = None
 
-    def _run_ridge_diagnostics(self, ridge_params: dict[str, Any]) -> None:
+    def _run_ridge_diagnostics(
+        self,
+        ridge_params: dict[str, Any],
+        apply_focus: bool,
+    ) -> None:
         """Run ridge diagnostics and dispatch figure/map outputs."""
         if self._input_bundle is None:
             return
@@ -1523,5 +1559,5 @@ class RenameTab(TabInterface):
             height=float(ridge_params.get("height", 0.0)),
             crs=points_gdf.crs,
         )
-        if direction_vector is not None:
+        if direction_vector is not None and apply_focus:
             self._focus_ridge_runtime()
