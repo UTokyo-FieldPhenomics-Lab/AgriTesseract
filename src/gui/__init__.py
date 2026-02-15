@@ -1,6 +1,6 @@
-# EasyPlantFieldID GUI Module
+# AgriTesseract GUI Module
 """
-GUI module for EasyPlantFieldID.
+GUI module for AgriTesseract.
 
 Contains the main window, components, and tab modules.
 """

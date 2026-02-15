@@ -1,5 +1,5 @@
 [project]
-name = "easyplantfieldid"
+name = "AgriTesseract"
 version = "0.1.0"
 description = "GIS preprocessing and seedling detection GUI application"
 readme = "README.md"

@@ -1,5 +1,5 @@
 {
-    "app.title": "EasyPlantFieldID",
+    "app.title": "AgriTesseract",
     "nav.subplot": "サブプロット生成",
     "nav.seedling": "苗位置検出",
     "nav.rename": "苗ID変更",

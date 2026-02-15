@@ -1,4 +1,4 @@
-# EasyPlantFieldID Tests
+# AgriTesseract Tests
 """
-Test suite for EasyPlantFieldID.
+Test suite for AgriTesseract.
 """

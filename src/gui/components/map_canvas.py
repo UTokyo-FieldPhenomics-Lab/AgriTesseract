@@ -1,5 +1,5 @@
 """
-Map Canvas component for EasyPlantFieldID GUI.
+Map Canvas component for AgriTesseract GUI.
 
 This module provides a GeoTiff viewer based on PyQtGraph with support for:
 - Large GeoTiff lazy loading with rasterio

@@ -1,4 +1,4 @@
-"""Utility package exports for EasyPlantFieldID."""
+"""Utility package exports for AgriTesseract."""
 
 from src.utils.seedling_detect.cache import (
     export_slice_preview_pdf,

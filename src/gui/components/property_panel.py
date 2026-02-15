@@ -1,5 +1,5 @@
 """
-Property Panel component for EasyPlantFieldID GUI.
+Property Panel component for AgriTesseract GUI.
 
 This module provides a property/parameter panel that displays
 context-specific options based on the current active tab.

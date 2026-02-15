@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-EasyPlantFieldID - GIS Preprocessing and Seedling Detection GUI.
+AgriTesseract - GIS Preprocessing and Seedling Detection GUI.
 
 Main entry point for the application.
 
@@ -28,7 +28,7 @@ if src_path.exists():
 
 def main() -> int:
     """
-    Main entry point for EasyPlantFieldID application.
+    Main entry point for AgriTesseract application.
 
     Returns
     -------
@@ -50,7 +50,7 @@ def main() -> int:
         level="DEBUG"
     )
 
-    logger.info("Starting EasyPlantFieldID...")
+    logger.info("Starting AgriTesseract...")
 
     # Configure PyQtGraph
     # pg.setConfigOptions(
@@ -60,7 +60,7 @@ def main() -> int:
 
     # Create application
     app = QApplication(sys.argv)
-    # app.setApplicationName("EasyPlantFieldID")
+    # app.setApplicationName("AgriTesseract")
     # app.setApplicationVersion("0.1.0")
     # app.setOrganizationName("UTokyo-FieldPhenomics-Lab")
 

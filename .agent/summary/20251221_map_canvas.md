@@ -1,6 +1,6 @@
 # Map Canvas & UI Implementation Guide
 
-This document summarizes the technical implementation, development logic, and key considerations for the Map View, Layer Panel (Tree View), and Status Bar components in `EasyPlantFieldID`.
+This document summarizes the technical implementation, development logic, and key considerations for the Map View, Layer Panel (Tree View), and Status Bar components in `AgriTesseract`.
 
 ## 1. Map Canvas (`src/gui/components/map_canvas.py`)
 

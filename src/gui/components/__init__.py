@@ -1,6 +1,6 @@
-# EasyPlantFieldID GUI Components
+# AgriTesseract GUI Components
 """
-Reusable GUI components for EasyPlantFieldID.
+Reusable GUI components for AgriTesseract.
 
 Components:
 - RibbonBar: Office-style ribbon toolbar

@@ -1,4 +1,4 @@
-# EasyPlantFieldID Subplot Refactor Design (EasyIDP Native)
+# AgriTesseract Subplot Refactor Design (EasyIDP Native)
 
 ## Context
 

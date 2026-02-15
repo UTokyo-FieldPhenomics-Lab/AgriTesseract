@@ -1,5 +1,5 @@
 """
-Layer Panel component for EasyPlantFieldID GUI.
+Layer Panel component for AgriTesseract GUI.
 
 This module provides a layer management panel with:
 - Tree-based layer list with drag-drop reordering

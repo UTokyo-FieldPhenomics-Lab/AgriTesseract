@@ -3,7 +3,7 @@
 ## Scope
 
 - Plan reference: `.agent/plans/20260209_easyidp_subplot_refactor_design.md`
-- Implementation scope: current `EasyPlantFieldID` repository only
+- Implementation scope: current `AgriTesseract` repository only
 - Related commits:
   - `f754e71` feat(subplot): migrate subplot flow to EasyIDP ROI
   - `66a32c6` refactor(core): drop geopandas core path and use ROI layers

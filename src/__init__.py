@@ -1,6 +1,6 @@
-# EasyPlantFieldID GUI - Source Package
+# AgriTesseract GUI - Source Package
 """
-EasyPlantFieldID: GIS preprocessing and seedling detection GUI application.
+AgriTesseract: GIS preprocessing and seedling detection GUI application.
 
 This package provides a PySide6-based GUI for:
 - Subplot generation from UAV imagery
