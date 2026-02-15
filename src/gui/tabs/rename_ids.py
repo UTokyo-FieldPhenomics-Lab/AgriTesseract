@@ -496,7 +496,7 @@ class RenameTab(TabInterface):
         self.spin_height = DoubleSpinBox()
         self.spin_height.setRange(0.1, 200.0)
         self.spin_height.setDecimals(2)
-        self.spin_height.setSingleStep(0.1)
+        self.spin_height.setSingleStep(1.0)
         self.spin_height.setValue(20)
         self.spin_height.valueChanged.connect(lambda: self._schedule_update("ridge"))
 
