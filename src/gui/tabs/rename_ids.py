@@ -53,6 +53,7 @@ from src.utils.rename_ids.ridge_direction import (
     resolve_direction_vector,
 )
 from src.utils.rename_ids.ridge_detection_controller import RidgeDetectionController
+from src.utils.rename_ids.ridge_ordering_controller import RidgeOrderingController
 
 
 def rename_top_tab_keys() -> tuple[str, ...]:
@@ -171,6 +172,8 @@ class RenameTab(TabInterface):
         self._ridge_rotation_angle_deg: float | None = None
         self._ridge_direction_source: str | None = None
         self._suspend_layer_remove_sync: bool = False
+        self._last_ridge_payload: dict[str, Any] = {}
+        self._last_ordering_payload: dict[str, Any] = {}
 
         # Debounce timer for reactive updates
         self._update_timer = QTimer(self)
@@ -190,6 +193,9 @@ class RenameTab(TabInterface):
         self._ridge_controller = RidgeDetectionController(
             map_canvas=self.map_component.map_canvas,
             figure_panel=self._ridge_figure_panel,
+        )
+        self._ordering_controller = RidgeOrderingController(
+            map_canvas=self.map_component.map_canvas,
         )
         self._refresh_ridge_ui_state()
 
@@ -1492,6 +1498,15 @@ class RenameTab(TabInterface):
             "height": self.spin_height.value(),
         }
 
+    def _current_ordering_params(self) -> dict[str, Any]:
+        """Build current ordering parameter payload from UI state."""
+        return {
+            "buffer": self.spin_buffer.value(),
+            "ransac_enabled": self.check_ransac.isChecked(),
+            "residual": self.spin_residual.value(),
+            "max_trials": self.spin_trials.value(),
+        }
+
     def _on_parameter_update_timeout(self):
         """Timer finished, emit the update signal."""
         if not self._pending_update_type:
@@ -1503,13 +1518,9 @@ class RenameTab(TabInterface):
             self._run_ridge_diagnostics(params, apply_focus=True)
 
         elif self._pending_update_type == "ordering":
-            params = {
-                "buffer": self.spin_buffer.value(),
-                "ransac_enabled": self.check_ransac.isChecked(),
-                "residual": self.spin_residual.value(),
-                "max_trials": self.spin_trials.value(),
-            }
+            params = self._current_ordering_params()
             self.sigOrderingParamsChanged.emit(params)
+            self._run_ordering_diagnostics(params)
 
         elif self._pending_update_type == "numbering":
             params = {"format_index": self.combo_format.currentIndex()}
@@ -1538,7 +1549,7 @@ class RenameTab(TabInterface):
             points_array = self._effective_points_array()
         except Exception:
             points_array = np.empty((0, 2), dtype=np.float64)
-        self._ridge_controller.update(
+        ridge_payload = self._ridge_controller.update(
             effective_points_xy=points_array,
             direction_vector=direction_vector,
             strength_ratio=float(ridge_params.get("strength", 0.0)),
@@ -1546,5 +1557,33 @@ class RenameTab(TabInterface):
             height=float(ridge_params.get("height", 0.0)),
             crs=points_gdf.crs,
         )
+        self._last_ridge_payload = ridge_payload
+        self._run_ordering_diagnostics(self._current_ordering_params())
         if direction_vector is not None and apply_focus:
             self._focus_ridge_runtime()
+
+    def _run_ordering_diagnostics(self, ordering_params: dict[str, Any]) -> None:
+        """Run ordering pipeline and render ridge-colored point layers."""
+        if self._input_bundle is None:
+            return
+        points_gdf = self._input_bundle.get("points_gdf")
+        if not isinstance(points_gdf, gpd.GeoDataFrame):
+            return
+        ridge_peak_payload = self._last_ridge_payload.get("ridge_peaks", {})
+        ridge_peaks = np.asarray(ridge_peak_payload.get("peak_x", np.asarray([])))
+        effective_mask = np.asarray(
+            self._input_bundle.get("effective_mask", np.ones(len(points_gdf))),
+            dtype=np.bool_,
+        )
+        ordering_payload = self._ordering_controller.update(
+            points_gdf=points_gdf,
+            effective_mask=effective_mask,
+            direction_vector=self._ridge_direction_vector_array,
+            ridge_peaks=ridge_peaks,
+            params=ordering_params,
+        )
+        self._last_ordering_payload = ordering_payload
+        self._input_bundle["ordering_result_gdf"] = ordering_payload[
+            "ordering_result_gdf"
+        ]
+        self._input_bundle["ordering_stats"] = ordering_payload["ordering_stats"]

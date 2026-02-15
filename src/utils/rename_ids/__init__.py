@@ -16,6 +16,7 @@ from src.utils.rename_ids.ridge_ordering import (
     assign_points_to_ridges,
     build_ordering_result,
 )
+from src.utils.rename_ids.ridge_ordering_controller import RidgeOrderingController
 
 __all__ = [
     "compute_rotation_angle_deg",
@@ -28,4 +29,5 @@ __all__ = [
     "build_ridge_intervals",
     "assign_points_to_ridges",
     "build_ordering_result",
+    "RidgeOrderingController",
 ]
