@@ -1,4 +1,3 @@
-
 {
     "app.title": "EasyPlantFieldID",
     "nav.subplot": "小样地生成",
@@ -7,7 +6,6 @@
     "nav.timeseries": "时间序列切块",
     "nav.annotate": "标注训练",
     "nav.settings": "设置",
-    
     "layer_panel.title": "图层",
     "layer_panel.add_tooltip": "添加图层",
     "layer_panel.remove_tooltip": "删除选中图层",
@@ -18,21 +16,17 @@
     "layer_panel.confirm.delete.msg": "确定要删除图层 '{name}' 吗？",
     "layer_panel.rename.fail.title": "重命名失败",
     "layer_panel.rename.fail.msg": "名称 '{name}' 已存在。",
-
     "status.coord": "坐标: X:{x:.2f}, Y:{y:.2f}",
     "status.zoom_prefix": "缩放: ",
     "status.rotation_prefix": "旋转角度: ",
     "status.zoom": "缩放: {zoom:.0f}%",
     "status.rotation": "旋转角度: {angle:.2f}°",
-
     "error": "错误",
     "warning": "警告",
     "success": "成功",
-
     "page.common.file": "文件",
     "page.common.save": "保存 SHP",
     "page.common.load_shp": "加载 SHP",
-    
     "page.subplot.group.file": "文件",
     "page.subplot.btn.load_image": "加载影像",
     "page.subplot.btn.load_boundary": "加载边界SHP",
@@ -55,14 +49,12 @@
     "page.subplot.btn.focus": "聚焦旋转",
     "page.subplot.btn.reset": "重置",
     "page.subplot.btn.save": "SHP保存",
-
     "page.subplot.dialog.load_image": "背景影像加载",
     "page.subplot.dialog.load_boundary": "边界SHP加载",
     "page.subplot.dialog.save": "保存小样地SHP",
     "page.subplot.error.invalid_boundary": "边界文件格式错误！",
     "page.subplot.warning.no_boundary": "请先加载边界文件！",
     "page.subplot.msg.success": "小样地生成和保存成功！",
-
     "page.seedling.group.sam": "SAM3 检测",
     "page.seedling.group.office": "功能区",
     "page.seedling.tab.file": "文件",
@@ -106,10 +98,10 @@
     "page.seedling.msg.preview_locked": "预览区已锁定",
     "page.seedling.msg.pick_preview_first": "请先在地图上选定预览区",
     "page.seedling.msg.preview_patch_failed": "无法读取预览区图像",
-    "page.seedling.msg.preview_running": "SAM3预览推理进行中",
+    "page.seedling.msg.preview_running": "SAM3推理进行中",
     "page.seedling.msg.preview_stopping": "正在尝试中断推理",
-    "page.seedling.msg.preview_finished": "预览推理完成",
-    "page.seedling.msg.preview_cancelled": "预览推理已取消",
+    "page.seedling.msg.preview_finished": "SAM3推理完成",
+    "page.seedling.msg.preview_cancelled": "SAM3推理已取消",
     "page.seedling.msg.boundary_loaded": "边界加载成功",
     "page.seedling.msg.boundary_invalid": "边界文件无效",
     "page.seedling.msg.no_merged_results": "请先完成全图推理并生成结果",
@@ -119,7 +111,6 @@
     "page.seedling.btn.send_to_next": "send to next",
     "page.seedling.msg.save_first_before_send": "请先保存SHP结果",
     "page.seedling.msg.sent_to_next": "点结果已发送到 Rename IDs",
-
     "page.rename.group.file": "文件",
     "page.rename.btn.load_points": "加载点",
     "page.rename.btn.load_dom": "加载影像",
@@ -171,7 +162,6 @@
     "page.rename.btn.move": "移动",
     "page.rename.btn.delete": "删除",
     "page.rename.btn.undo": "撤销",
-
     "page.ts.btn.load_points": "加载苗位置SHP",
     "page.ts.btn.add_date": "添加日期",
     "page.ts.group.param": "切块参数",
@@ -183,7 +173,6 @@
     "page.ts.label.dir": "目录:",
     "page.ts.btn.browse": "浏览...",
     "page.ts.btn.start": "开始切块",
-
     "page.anno.btn.load_img": "加载图片目录",
     "page.anno.group.nav": "导航",
     "page.anno.btn.prev": "上一张",
@@ -195,7 +184,6 @@
     "page.anno.group.train": "模型训练",
     "page.anno.btn.train": "训练 YOLO",
     "page.anno.btn.switch": "切换模型",
-
     "settings.group.general": "常规",
     "settings.group.model": "模型",
     "settings.label.theme": "主题模式",
@@ -216,62 +204,47 @@
     "settings.placeholder.no_file": "未选择文件",
     "settings.msg.restart_title": "需要重启",
     "settings.msg.restart": "请重启应用程序以应用更改",
-
     "prop.group.numbering": "编号规则",
-
     "prop.label.numbering_mode": "编号方式",
     "prop.label.start_row": "起始行号",
     "prop.label.start_col": "起始列号",
     "prop.label.prefix": "ID前缀",
     "prop.label.suffix": "ID后缀",
-    
     "prop.group.rotation": "旋转选项",
     "prop.label.rotation": "旋转角度",
     "prop.check.auto_rotate": "自动计算",
-
     "prop.group.detect": "检测设置",
     "prop.label.confidence": "置信度阈值",
     "prop.label.nms_iou": "NMS IoU",
-
     "prop.group.stats": "统计信息",
     "prop.label.total": "检测总数",
     "prop.label.selected": "已选择",
-
     "prop.group.ransac": "RANSAC 参数",
     "prop.label.dist_thresh": "距离阈值",
     "prop.label.height_thresh": "高度阈值",
-    
     "prop.group.numbering_opt": "编号选项",
     "prop.label.order": "排序方向",
     "prop.label.start_id": "起始编号",
-
     "prop.group.ridge_stats": "垄统计",
     "prop.label.ridge_count": "检测到的垄数",
     "prop.label.plant_count": "总株数",
-
     "prop.group.data": "数据源",
     "prop.label.date_count": "已添加",
     "prop.label.point_count": "苗位置",
-
     "prop.group.output": "输出选项",
     "prop.label.format": "图片格式",
     "prop.check.subfolders": "按株分目录",
-
     "prop.group.adjust": "图像调节",
     "prop.label.brightness": "亮度",
     "prop.label.contrast": "对比度",
     "prop.label.gamma": "Gamma",
-
     "prop.group.instance": "标注实例",
     "prop.label.current_img": "当前图片",
-
     "prop.group.class": "类别管理",
     "prop.label.current_class": "当前类别",
     "prop.btn.add_class": "添加类别",
-
     "prop.group.train": "训练状态",
     "prop.label.annotated": "已标注图片",
     "prop.label.model_status": "模型状态",
-    
     "prop.title": "属性"
 }

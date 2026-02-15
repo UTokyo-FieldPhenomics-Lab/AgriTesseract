@@ -721,12 +721,30 @@ class SeedlingTab(TabInterface):
         self._full_worker.sigCancelled.connect(self._on_full_inference_cancelled)
         self._full_thread.start()
         self.btn_start_inference.setText(tr("page.seedling.btn.stop_inference"))
+        if self.stateTooltip:
+            self.stateTooltip.setState(True)
+            self.stateTooltip = None
+
+        self.stateTooltip = StateToolTip(
+            tr("info"),
+            tr("page.seedling.msg.preview_running"),
+            self.window(),
+        )
+        # Position the tooltip nicely
+        self.stateTooltip.move(self.stateTooltip.getSuitablePos())
+        self.stateTooltip.show()
         self.map_component.status_bar.set_progress(None)
 
     def _stop_full_inference(self) -> None:
         """Request cancellation for running full-map inference."""
         if self._full_worker is None:
             return
+
+        if self.stateTooltip:
+            # If not None here, it means it wasn't handled by finished (so failed or cancelled)
+            self.stateTooltip.close()
+            self.stateTooltip = None
+
         self._full_worker.request_cancel()
 
     def _teardown_full_thread(self) -> None:
@@ -751,6 +769,14 @@ class SeedlingTab(TabInterface):
         """Store full-map inference result and cleanup worker."""
         self._last_full_result = result_payload
         self._refresh_full_inference_layers(notify=True)
+
+        if self.stateTooltip:
+            self.stateTooltip.setContent(
+                tr("page.seedling.msg.preview_finished") + " 😆"
+            )
+            self.stateTooltip.setState(True)
+            self.stateTooltip = None
+
         self._teardown_full_thread()
 
     def _refresh_full_inference_layers(self, *_args, notify: bool = False) -> None:

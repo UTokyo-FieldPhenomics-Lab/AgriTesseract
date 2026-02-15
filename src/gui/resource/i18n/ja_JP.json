@@ -1,4 +1,3 @@
-
 {
     "app.title": "EasyPlantFieldID",
     "nav.subplot": "サブプロット生成",
@@ -7,7 +6,6 @@
     "nav.timeseries": "時系列クロップ",
     "nav.annotate": "アノテーション・学習",
     "nav.settings": "設定",
-    
     "layer_panel.title": "レイヤー",
     "layer_panel.add_tooltip": "レイヤー追加",
     "layer_panel.remove_tooltip": "選択したレイヤーを削除",
@@ -18,21 +16,17 @@
     "layer_panel.confirm.delete.msg": "レイヤー '{name}' を削除しますか？",
     "layer_panel.rename.fail.title": "名前変更失敗",
     "layer_panel.rename.fail.msg": "名前 '{name}' は既に存在します。",
-
     "status.coord": "座標: X:{x:.2f}, Y:{y:.2f}",
     "status.zoom_prefix": "ズーム: ",
     "status.rotation_prefix": "回転: ",
     "status.zoom": "ズーム: {zoom:.0f}%",
     "status.rotation": "回転: {angle:.2f}°",
-
     "error": "エラー",
     "warning": "警告",
     "success": "成功",
-
     "page.common.file": "ファイル",
     "page.common.save": "保存 SHP",
     "page.common.load_shp": "SHP読込",
-    
     "page.subplot.group.file": "ファイル",
     "page.subplot.btn.load_image": "画像読込",
     "page.subplot.btn.load_boundary": "境界SHP読込",
@@ -55,14 +49,12 @@
     "page.subplot.btn.focus": "フォーカス回転",
     "page.subplot.btn.reset": "リセット",
     "page.subplot.btn.save": "SHP保存",
-
     "page.subplot.dialog.load_image": "背景画像読込",
     "page.subplot.dialog.load_boundary": "境界SHP読込",
     "page.subplot.dialog.save": "サブプロットSHP保存",
     "page.subplot.error.invalid_boundary": "境界ファイルが正しくありません！",
     "page.subplot.warning.no_boundary": "境界ファイルを先に読込してください！",
     "page.subplot.msg.success": "サブプロット生成と保存が完了しました！",
-
     "page.seedling.group.sam": "SAM3 検出",
     "page.seedling.group.office": "機能リボン",
     "page.seedling.tab.file": "ファイル",
@@ -106,10 +98,10 @@
     "page.seedling.msg.preview_locked": "前覧範囲を固定しました",
     "page.seedling.msg.pick_preview_first": "先にマップ上で前覧範囲を選択してください",
     "page.seedling.msg.preview_patch_failed": "前覧画像を読み取れませんでした",
-    "page.seedling.msg.preview_running": "SAM3前覧推論を実行中",
-    "page.seedling.msg.preview_stopping": "推論を停止しています",
-    "page.seedling.msg.preview_finished": "前覧推論が完了しました",
-    "page.seedling.msg.preview_cancelled": "プレビュー推論をキャンセルしました",
+    "page.seedling.msg.preview_running": "SAM3推論を実行中",
+    "page.seedling.msg.preview_stopping": "SAM3推論を停止しています",
+    "page.seedling.msg.preview_finished": "SAM3推論が完了しました",
+    "page.seedling.msg.preview_cancelled": "SAM3推論をキャンセルしました",
     "page.seedling.msg.boundary_loaded": "境界を読み込みました",
     "page.seedling.msg.boundary_invalid": "境界ファイルが無効です",
     "page.seedling.msg.no_merged_results": "先に全体推論を実行してください",
@@ -119,7 +111,6 @@
     "page.seedling.btn.send_to_next": "send to next",
     "page.seedling.msg.save_first_before_send": "先にSHPを保存してください",
     "page.seedling.msg.sent_to_next": "ポイント結果をRename IDsへ送信しました",
-
     "page.rename.group.file": "ファイル",
     "page.rename.btn.load_points": "点を読込",
     "page.rename.btn.load_dom": "画像を読込",
@@ -171,7 +162,6 @@
     "page.rename.btn.move": "移動",
     "page.rename.btn.delete": "削除",
     "page.rename.btn.undo": "元に戻す",
-
     "page.ts.btn.load_points": "苗位置SHP",
     "page.ts.btn.add_date": "日付追加",
     "page.ts.group.param": "クロップ",
@@ -183,7 +173,6 @@
     "page.ts.label.dir": "フォルダ:",
     "page.ts.btn.browse": "参照...",
     "page.ts.btn.start": "開始",
-
     "page.anno.btn.load_img": "画像フォルダ",
     "page.anno.group.nav": "ナビ",
     "page.anno.btn.prev": "戻る",
@@ -195,7 +184,6 @@
     "page.anno.group.train": "学習",
     "page.anno.btn.train": "YOLO学習",
     "page.anno.btn.switch": "モデル切替",
-
     "settings.group.general": "一般",
     "settings.group.model": "モデル",
     "settings.label.theme": "テーマモード",
@@ -216,62 +204,47 @@
     "settings.placeholder.no_file": "ファイルが選択されていません",
     "settings.msg.restart_title": "再起動が必要",
     "settings.msg.restart": "変更を適用するにはアプリケーションを再起動してください",
-
     "prop.group.numbering": "番号付与規則",
-
     "prop.label.numbering_mode": "番号付与モード",
     "prop.label.start_row": "開始行",
     "prop.label.start_col": "開始列",
     "prop.label.prefix": "ID接頭辞",
     "prop.label.suffix": "ID接尾辞",
-    
     "prop.group.rotation": "回転オプション",
     "prop.label.rotation": "回転角度",
     "prop.check.auto_rotate": "自動計算",
-
     "prop.group.detect": "検出設定",
     "prop.label.confidence": "信頼度閾値",
     "prop.label.nms_iou": "NMS IoU",
-
     "prop.group.stats": "統計情報",
     "prop.label.total": "検出総数",
     "prop.label.selected": "選択中",
-
     "prop.group.ransac": "RANSAC パラメータ",
     "prop.label.dist_thresh": "距離閾値",
     "prop.label.height_thresh": "高さ閾値",
-    
     "prop.group.numbering_opt": "番号オプション",
     "prop.label.order": "ソート順",
     "prop.label.start_id": "開始番号",
-
     "prop.group.ridge_stats": "畝統計",
     "prop.label.ridge_count": "検出された畝数",
     "prop.label.plant_count": "総株数",
-
     "prop.group.data": "データソース",
     "prop.label.date_count": "追加済み日付",
     "prop.label.point_count": "苗位置点",
-
     "prop.group.output": "出力オプション",
     "prop.label.format": "画像形式",
     "prop.check.subfolders": "株ごとにフォルダ作成",
-
     "prop.group.adjust": "画像調整",
     "prop.label.brightness": "明るさ",
     "prop.label.contrast": "コントラスト",
     "prop.label.gamma": "ガンマ",
-
     "prop.group.instance": "インスタンス",
     "prop.label.current_img": "現在の画像",
-
     "prop.group.class": "クラス管理",
     "prop.label.current_class": "現在のクラス",
     "prop.btn.add_class": "クラス追加",
-
     "prop.group.train": "学習ステータス",
     "prop.label.annotated": "アノテーション済み",
     "prop.label.model_status": "モデル状態",
-    
     "prop.title": "プロパティ"
 }

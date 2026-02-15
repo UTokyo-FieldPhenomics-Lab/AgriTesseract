@@ -42,6 +42,7 @@ def run_preview_inference(
     cache_dir: str | None = None,
     _predictor_override: Any | None = None,
     predictor: Any | None = None,
+    with_log: bool = True,
 ) -> dict[str, Any]:
     """Run SAM3 preview inference and return polygon masks.
 
@@ -79,7 +80,9 @@ def run_preview_inference(
         return {"polygons_px": [], "scores": np.zeros((0,), dtype=float)}
 
     result_obj = results[0]
-    logger.info(result_obj)
+
+    if with_log:
+        logger.info(result_obj)
 
     polygons_px = _extract_polygons_from_mask_xy(result_obj)
     scores = _extract_scores(result_obj, len(polygons_px))
@@ -94,12 +97,14 @@ def run_preview_inference(
             else np.asarray(mask_data)
         )
         mask_count = int(mask_array.shape[0]) if mask_array.ndim == 3 else 0
-    logger.info(
-        f"Preview SAM3 counts raw_masks_data={mask_count} "
-        f"scores={scores}"
-        f"raw_masks_xy={len(xy_list)} "
-        f"raw_polygons={len(polygons_px)}"
-    )
+
+    if with_log:
+        logger.info(
+            f"Preview SAM3 counts raw_masks_data={mask_count} "
+            f"scores={scores}"
+            f"raw_masks_xy={len(xy_list)} "
+            f"raw_polygons={len(polygons_px)}"
+        )
     return {
         "polygons_px": polygons_px,
         "scores": scores,
@@ -144,6 +149,7 @@ def run_slice_inference(
         cache_dir=cache_dir,
         _predictor_override=_predictor_override,
         predictor=predictor,
+        with_log=False,
     )
     polygons_px = preview_data["polygons_px"]
     boxes_xyxy = polygons_to_boxes_xyxy(polygons_px)
