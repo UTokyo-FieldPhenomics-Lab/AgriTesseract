@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import geopandas as gpd
 import numpy as np
+from sklearn.linear_model import RANSACRegressor
 
 
 def build_ridge_intervals(ridge_peaks: np.ndarray, buffer: float) -> np.ndarray:
@@ -44,6 +45,10 @@ def assign_points_to_ridges(
     projected_x: np.ndarray,
     effective_mask: np.ndarray,
     ridge_intervals: np.ndarray,
+    projected_y: np.ndarray | None = None,
+    ransac_enabled: bool = False,
+    residual: float = 50.0,
+    max_trials: int = 1000,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Assign projected points to ridge intervals.
 
@@ -55,6 +60,15 @@ def assign_points_to_ridges(
         Boolean mask indicating valid points, shape ``(N,)``.
     ridge_intervals : numpy.ndarray
         Ridge interval bounds from ``build_ridge_intervals``, shape ``(K, 2)``.
+    projected_y : numpy.ndarray | None, optional
+        Projection along ridge direction, shape ``(N,)``; required when
+        ``ransac_enabled`` is ``True``.
+    ransac_enabled : bool, optional
+        Whether to run RANSAC filtering inside each assigned ridge.
+    residual : float, optional
+        Residual threshold for ``RANSACRegressor``.
+    max_trials : int, optional
+        Maximum number of RANSAC iterations.
 
     Returns
     -------
@@ -78,13 +92,20 @@ def assign_points_to_ridges(
         return ridge_id, is_inlier
     centers = interval_array.mean(axis=1)
     for point_index in np.where(mask_array)[0]:
+        scalar_index = int(point_index)
         ridge_index = _pick_ridge_for_value(
-            projected_array[point_index], interval_array, centers
+            float(projected_array[scalar_index]), interval_array, centers
         )
         if ridge_index < 0:
             continue
-        ridge_id[point_index] = ridge_index
-        is_inlier[point_index] = True
+        ridge_id[scalar_index] = ridge_index
+        is_inlier[scalar_index] = True
+    if not ransac_enabled:
+        return ridge_id, is_inlier
+    y_array = _validate_projected_y(projected_y, projected_array.shape[0])
+    _apply_ransac_filter(
+        projected_array, y_array, ridge_id, is_inlier, residual, max_trials
+    )
     return ridge_id, is_inlier
 
 
@@ -127,7 +148,8 @@ def build_ordering_result(
         geometry=points_gdf.geometry,
         crs=points_gdf.crs,
     )
-    return result[["fid", "ridge_id", "is_inlier", "geometry"]]
+    output = result[["fid", "ridge_id", "is_inlier", "geometry"]]
+    return gpd.GeoDataFrame(output, geometry="geometry", crs=points_gdf.crs)
 
 
 def _build_multi_ridge_intervals(peak_array: np.ndarray, buffer: float) -> np.ndarray:
@@ -162,3 +184,48 @@ def _pick_ridge_for_value(
         return int(matches[0])
     offset = np.abs(centers[matches] - value)
     return int(matches[int(np.argmin(offset))])
+
+
+def _validate_projected_y(projected_y: np.ndarray | None, size: int) -> np.ndarray:
+    """Validate and normalize projected y-axis values for RANSAC."""
+    if projected_y is None:
+        raise ValueError("projected_y is required when ransac_enabled=True")
+    y_array = np.asarray(projected_y, dtype=np.float64)
+    if y_array.ndim != 1:
+        raise ValueError("projected_y must be 1D")
+    if y_array.size != size:
+        raise ValueError("projected_y length must match projected_x")
+    return y_array
+
+
+def _apply_ransac_filter(
+    projected_x: np.ndarray,
+    projected_y: np.ndarray,
+    ridge_id: np.ndarray,
+    is_inlier: np.ndarray,
+    residual: float,
+    max_trials: int,
+) -> None:
+    """Apply per-ridge RANSAC and update inlier flags in place."""
+    if residual <= 0:
+        raise ValueError("residual must be > 0")
+    if max_trials < 1:
+        raise ValueError("max_trials must be >= 1")
+    unique_ridges = np.unique(ridge_id[ridge_id >= 0])
+    for ridge_value in unique_ridges:
+        point_indices = np.where(ridge_id == ridge_value)[0]
+        if point_indices.size < 2:
+            continue
+        x_data = projected_y[point_indices].reshape(-1, 1)
+        y_data = projected_x[point_indices]
+        ransac = RANSACRegressor(
+            residual_threshold=float(residual),
+            max_trials=int(max_trials),
+            random_state=0,
+        )
+        try:
+            ransac.fit(x_data, y_data)
+        except ValueError:
+            continue
+        inlier_mask = np.asarray(ransac.inlier_mask_, dtype=bool)
+        is_inlier[point_indices] = inlier_mask
