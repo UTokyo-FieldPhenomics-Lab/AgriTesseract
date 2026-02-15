@@ -63,3 +63,17 @@ def test_remove_points_layer_disables_ridge_controls(qtbot) -> None:
     assert tab.combo_direction.isEnabled() is False
     assert tab.btn_set_ridge_direction.isEnabled() is False
     assert tab.btn_focus_ridge.isEnabled() is False
+
+
+def test_render_points_overlay_registers_red_rename_points_layer(qtbot) -> None:
+    """Input bundle render should register rename_points with red style."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_bundle(with_boundary=False))
+
+    layer_info = tab.map_component.map_canvas._layers.get("rename_points")
+
+    assert layer_info is not None
+    item = layer_info["item"]
+    assert item.opts["pen"].color().name().lower() == "#ff3b30"
+    assert item.opts["brush"].color().name().lower() == "#ff3b30"

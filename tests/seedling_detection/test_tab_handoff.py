@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+from types import SimpleNamespace
 
+from src.gui.components.map_canvas import MapCanvas
 from src.gui.tabs.seedling_detect import SeedlingTab
 
 
@@ -78,3 +80,21 @@ def test_build_rename_bundle_contains_required_fields() -> None:
     assert bundle["points_meta"]["source"] == "send_next"
     assert bundle["dom_layers"] == [{"name": "demo", "path": "/tmp/dom/demo.tif"}]
     assert bundle["effective_mask"].tolist() == [True]
+
+
+def test_copy_points_overlay_to_rename_tab_builds_red_result_layer(qtbot) -> None:
+    """Fallback copy should register result_points with planned red style."""
+    seedling_tab = SeedlingTab.__new__(SeedlingTab)
+    seedling_tab._last_full_result = {
+        "merged": {"points_xy": np.asarray([[1.0, 2.0], [4.0, 5.0]], dtype=float)}
+    }
+    rename_tab = SimpleNamespace(map_component=SimpleNamespace(map_canvas=MapCanvas()))
+    qtbot.addWidget(rename_tab.map_component.map_canvas)
+
+    SeedlingTab._copy_points_overlay_to_rename_tab(seedling_tab, rename_tab)
+
+    layer_info = rename_tab.map_component.map_canvas._layers.get("result_points")
+    assert layer_info is not None
+    item = layer_info["item"]
+    assert item.opts["pen"].color().name().lower() == "#ff3b30"
+    assert item.opts["brush"].color().name().lower() == "#ff3b30"

@@ -7,7 +7,6 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import pyqtgraph as pg
 import rasterio
 import geopandas as gpd
 from loguru import logger
@@ -36,8 +35,6 @@ from qfluentwidgets import (
 )
 
 from src.gui.components.base_interface import TabInterface
-from src.gui.components.map_canvas import LayerBounds
-from src.gui.components.layer_types import LayerType
 from src.gui.config import cfg, tr
 from src.utils.seedling_detect.io import export_inference_outputs
 from src.utils.seedling_detect.preview_controller import SeedlingPreviewController
@@ -1077,28 +1074,16 @@ class SeedlingTab(TabInterface):
         if map_canvas is None:
             return
         layer_name = "result_points"
-        map_canvas.remove_layer(layer_name)
-        scatter_item = pg.ScatterPlotItem(
-            x=points_xy[:, 0],
-            y=points_xy[:, 1],
-            symbol="o",
+        map_canvas.add_point_layer(
+            points_xy,
+            layer_name,
             size=8,
-            pen=pg.mkPen(color="#FFAA00", width=1.2),
-            brush=pg.mkBrush(255, 120, 0, 180),
+            fill_color=(255, 59, 48, 180),
+            border_color="#FF3B30",
+            border_width=1.2,
+            z_value=630,
+            replace=True,
         )
-        scatter_item.setZValue(630)
-        map_canvas.add_overlay_item(scatter_item)
-        x_min = float(np.min(points_xy[:, 0]))
-        y_min = float(np.min(points_xy[:, 1]))
-        x_max = float(np.max(points_xy[:, 0]))
-        y_max = float(np.max(points_xy[:, 1]))
-        map_canvas._layers[layer_name] = {
-            "item": scatter_item,
-            "visible": True,
-            "bounds": LayerBounds(x_min, y_min, x_max, y_max),
-        }
-        map_canvas._layer_order.append(layer_name)
-        map_canvas.sigLayerAdded.emit(layer_name, LayerType.VECTOR.value)
 
     def _current_dom_crs_wkt(self) -> str | None:
         """Read current DOM CRS WKT text for PRJ export."""
