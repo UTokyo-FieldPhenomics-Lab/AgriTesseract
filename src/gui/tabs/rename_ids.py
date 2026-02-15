@@ -36,6 +36,7 @@ from qfluentwidgets import (
 )
 
 from src.gui.components.base_interface import TabInterface
+from src.gui.components.bottom_panel import BottomPanelFigure
 from src.gui.components.map_canvas import LayerBounds
 from src.gui.components.layer_types import LayerType
 from src.gui.config import tr
@@ -60,6 +61,22 @@ def rename_top_tab_keys() -> tuple[str, ...]:
         "page.rename.tab.ordering",
         "page.rename.tab.numbering",
     )
+
+
+class RidgeFigurePanel(BottomPanelFigure):
+    """Density and peak diagnostics panel for ridge detection.
+
+    Notes
+    -----
+    This panel intentionally keeps one plot only (density + peaks)
+    as required by module 04.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.plot_widget.setLabel("left", "Count")
+        self.plot_widget.setLabel("bottom", "Projected X")
+        self.plot_widget.setTitle("Ridge Density")
 
 
 class RenameTab(TabInterface):

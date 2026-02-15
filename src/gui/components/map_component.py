@@ -3,6 +3,7 @@ from typing import Optional
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter
 from PySide6.QtCore import Qt, Signal
 
+from src.gui.components.bottom_panel import BottomPanelHost
 from src.gui.components.layer_panel import LayerPanel
 from src.gui.components.map_canvas import MapCanvas
 from src.gui.components.status_bar import StatusBar
@@ -23,6 +24,8 @@ class MapComponent(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+        self._is_adjusting_bottom_panel = False
+        self._bottom_auto_hide_height_px = 24
 
         self._init_ui()
         self._connect_signals()
@@ -42,7 +45,7 @@ class MapComponent(QWidget):
         self.layer_panel = LayerPanel()
         self.h_splitter.addWidget(self.layer_panel)
 
-        # 2. Vertical Splitter for Map | Status Bar
+        # 2. Vertical Splitter for Map | Bottom Panel | Status Bar
         self.v_splitter = QSplitter(Qt.Orientation.Vertical)
         self.v_splitter.setHandleWidth(1)
 
@@ -52,9 +55,21 @@ class MapComponent(QWidget):
         self.map_canvas = MapCanvas()
         self.v_splitter.addWidget(self.map_canvas)
 
-        # 3. Status Bar
+        # 3. Bottom Panel Host
+        self.bottom_panel_host = BottomPanelHost()
+        self.v_splitter.addWidget(self.bottom_panel_host)
+
+        # 4. Status Bar
         self.status_bar = StatusBar()
         self.v_splitter.addWidget(self.status_bar)
+
+        self.v_splitter.setStretchFactor(0, 4)
+        self.v_splitter.setStretchFactor(1, 1)
+        self.v_splitter.setStretchFactor(2, 0)
+        self.v_splitter.setCollapsible(1, True)
+        self.v_splitter.setCollapsible(2, False)
+        self._apply_vertical_sizes(map_height=800, panel_height=200)
+        self.hide_panel()
 
         layout.addWidget(self.h_splitter, 1)  # Take available vertical space
 
@@ -91,6 +106,73 @@ class MapComponent(QWidget):
         )
         self.map_canvas.sigLayerOrderChanged.connect(self.layer_panel.set_layer_order)
         self.map_canvas.sigLayerRenamed.connect(self.layer_panel.rename_layer)
+        self.v_splitter.splitterMoved.connect(self._on_vertical_splitter_moved)
+
+    def _apply_vertical_sizes(self, map_height: int, panel_height: int) -> None:
+        """Apply vertical splitter sizes with fixed status bar.
+
+        Parameters
+        ----------
+        map_height : int
+            Desired height of map canvas section in pixels.
+        panel_height : int
+            Desired height of bottom panel host section in pixels.
+        """
+        status_height = max(1, self.status_bar.height())
+        self.v_splitter.setSizes(
+            [max(0, map_height), max(0, panel_height), status_height]
+        )
+
+    def _on_vertical_splitter_moved(self, _pos: int, _index: int) -> None:
+        """Enforce bottom panel behavior after user drags splitter."""
+        if self._is_adjusting_bottom_panel or not self.bottom_panel_host.isVisible():
+            return
+        map_height, panel_height, _ = self.v_splitter.sizes()
+        if panel_height <= self._bottom_auto_hide_height_px:
+            self.hide_panel()
+            return
+        if panel_height <= map_height:
+            return
+        self._clamp_bottom_panel_half_ratio(map_height, panel_height)
+
+    def _clamp_bottom_panel_half_ratio(
+        self, map_height: int, panel_height: int
+    ) -> None:
+        """Clamp bottom panel max height to 1:1 ratio against map area."""
+        total = max(0, map_height + panel_height)
+        clamped_panel = total // 2
+        clamped_map = total - clamped_panel
+        self._is_adjusting_bottom_panel = True
+        self._apply_vertical_sizes(clamped_map, clamped_panel)
+        self._is_adjusting_bottom_panel = False
+
+    def show_panel(self, name: str) -> bool:
+        """Show registered panel in bottom host.
+
+        Parameters
+        ----------
+        name : str
+            Registered panel name in ``BottomPanelHost``.
+
+        Returns
+        -------
+        bool
+            ``True`` when panel exists and is shown.
+        """
+        if not self.bottom_panel_host.show_panel(name):
+            return False
+        map_height, panel_height, _ = self.v_splitter.sizes()
+        available = max(0, map_height + panel_height)
+        next_panel_height = max(120, available // 5)
+        next_map_height = max(0, available - next_panel_height)
+        self._apply_vertical_sizes(next_map_height, next_panel_height)
+        return True
+
+    def hide_panel(self) -> None:
+        """Hide bottom panel host and return space back to map."""
+        self.bottom_panel_host.hide_panel()
+        map_height, panel_height, _ = self.v_splitter.sizes()
+        self._apply_vertical_sizes(map_height + panel_height, 0)
 
     def cleanup(self):
         """Cleanup resources."""
