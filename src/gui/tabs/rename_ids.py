@@ -615,7 +615,24 @@ class RenameTab(TabInterface):
 
     def _on_focus_ridge_clicked(self) -> None:
         """Rotate map to follow stored ridge direction angle."""
-        self._apply_saved_rotation()
+        self._focus_ridge_runtime()
+
+    def _focus_ridge_runtime(self) -> bool:
+        """Apply ridge focus pipeline: rotation then x-axis fit.
+
+        Returns
+        -------
+        bool
+            ``True`` when both rotation and fit-width succeed.
+        """
+        if not self._apply_saved_rotation():
+            return False
+        return bool(
+            self.map_component.map_canvas.fit_layer_to_x(
+                "rename_points",
+                padding=0.05,
+            )
+        )
 
     def _set_edit_mode_exclusion_for_manual(self, manual_active: bool) -> None:
         """Toggle numbering edit tools when manual ridge draw is active.
@@ -1506,3 +1523,5 @@ class RenameTab(TabInterface):
             height=float(ridge_params.get("height", 0.0)),
             crs=points_gdf.crs,
         )
+        if direction_vector is not None:
+            self._focus_ridge_runtime()

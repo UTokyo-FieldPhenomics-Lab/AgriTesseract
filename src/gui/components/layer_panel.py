@@ -117,6 +117,8 @@ class LayerPanel(QWidget):
         object, object
     )  # menu object, layer name (or None)
     sigZoomToLayer = Signal(str)
+    sigFitLayerToX = Signal(str)
+    sigFitLayerToY = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         """
@@ -427,6 +429,20 @@ class LayerPanel(QWidget):
                     triggered=lambda: self._zoom_to_layer(layer_name),
                 )
             )
+            menu.addAction(
+                Action(
+                    self._fit_width_icon(),
+                    "Fit Width",
+                    triggered=lambda: self._fit_layer_width(layer_name),
+                )
+            )
+            menu.addAction(
+                Action(
+                    self._fit_height_icon(),
+                    "Fit Height",
+                    triggered=lambda: self._fit_layer_height(layer_name),
+                )
+            )
             menu.addSeparator()
             menu.addAction(
                 Action(
@@ -459,6 +475,22 @@ class LayerPanel(QWidget):
         """Zoom to layer extent."""
         self.sigZoomToLayer.emit(name)
         logger.debug(f"Zoom to layer: {name}")
+
+    def _fit_layer_width(self, name: str) -> None:
+        """Emit fit-width request for one layer."""
+        self.sigFitLayerToX.emit(name)
+
+    def _fit_layer_height(self, name: str) -> None:
+        """Emit fit-height request for one layer."""
+        self.sigFitLayerToY.emit(name)
+
+    def _fit_width_icon(self):
+        """Return icon enum for fit width action."""
+        return getattr(FIF, "CARE_DOWN_SOLID", FIF.ZOOM_IN)
+
+    def _fit_height_icon(self):
+        """Return icon enum for fit height action."""
+        return getattr(FIF, "CARE_RIGHT_SOLID", FIF.ZOOM_IN)
 
     def _delete_layer(self, name: str) -> None:
         """Delete a layer after confirmation."""

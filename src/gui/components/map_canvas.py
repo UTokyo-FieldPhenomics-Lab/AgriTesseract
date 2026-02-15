@@ -357,6 +357,121 @@ class MapCanvas(QWidget):
             self._view_box.setRange(rect, padding=0.05)
             logger.debug(f"Zoomed to layer: {layer_name}")
 
+    def _get_layer_bounds(self, layer_name: str) -> Optional[LayerBounds]:
+        """Get normalized bounds for one layer.
+
+        Parameters
+        ----------
+        layer_name : str
+            Target layer name.
+
+        Returns
+        -------
+        LayerBounds or None
+            Normalized bounds when available.
+        """
+        layer_info = self._layers.get(layer_name)
+        if layer_info is None:
+            return None
+        bounds_obj = layer_info.get("bounds")
+        if bounds_obj is None:
+            return None
+        if isinstance(bounds_obj, LayerBounds):
+            return bounds_obj
+        if all(hasattr(bounds_obj, key) for key in ("left", "bottom", "right", "top")):
+            return LayerBounds(
+                left=float(bounds_obj.left),
+                bottom=float(bounds_obj.bottom),
+                right=float(bounds_obj.right),
+                top=float(bounds_obj.top),
+            )
+        return None
+
+    def fit_layer_to_x(self, layer_name: str, padding: float = 0.05) -> bool:
+        """Fit view width to one layer while preserving height range.
+
+        Parameters
+        ----------
+        layer_name : str
+            Target layer name.
+        padding : float, optional
+            Relative padding ratio applied to layer width.
+
+        Returns
+        -------
+        bool
+            ``True`` when fit succeeds, ``False`` when bounds are invalid.
+        """
+        bounds_obj = self._get_layer_bounds(layer_name)
+        if bounds_obj is None:
+            return False
+        x_span = float(bounds_obj.right - bounds_obj.left)
+        if x_span <= 0:
+            return False
+        x_range, y_range = self._view_box.viewRange()
+        view_ratio = self._current_view_ratio(x_range, y_range)
+        x_padding = x_span * max(0.0, float(padding))
+        x_min = float(bounds_obj.left - x_padding)
+        x_max = float(bounds_obj.right + x_padding)
+        y_center = (float(y_range[0]) + float(y_range[1])) * 0.5
+        y_span = (x_max - x_min) / view_ratio
+        y_min = y_center - y_span * 0.5
+        y_max = y_center + y_span * 0.5
+        self._plot_widget.setAspectLocked(False)
+        self._view_box.setRange(
+            xRange=(x_min, x_max),
+            yRange=(y_min, y_max),
+            padding=0.0,
+        )
+        self._plot_widget.setAspectLocked(True)
+        return True
+
+    def fit_layer_to_y(self, layer_name: str, padding: float = 0.05) -> bool:
+        """Fit view height to one layer while preserving width range.
+
+        Parameters
+        ----------
+        layer_name : str
+            Target layer name.
+        padding : float, optional
+            Relative padding ratio applied to layer height.
+
+        Returns
+        -------
+        bool
+            ``True`` when fit succeeds, ``False`` when bounds are invalid.
+        """
+        bounds_obj = self._get_layer_bounds(layer_name)
+        if bounds_obj is None:
+            return False
+        y_span = float(bounds_obj.top - bounds_obj.bottom)
+        if y_span <= 0:
+            return False
+        x_range = self._view_box.viewRange()[0]
+        _, y_range = self._view_box.viewRange()
+        view_ratio = self._current_view_ratio(x_range, y_range)
+        y_padding = y_span * max(0.0, float(padding))
+        y_min = float(bounds_obj.bottom - y_padding)
+        y_max = float(bounds_obj.top + y_padding)
+        x_center = (float(x_range[0]) + float(x_range[1])) * 0.5
+        x_span = (y_max - y_min) * view_ratio
+        x_min = x_center - x_span * 0.5
+        x_max = x_center + x_span * 0.5
+        self._plot_widget.setAspectLocked(False)
+        self._view_box.setRange(
+            xRange=(x_min, x_max),
+            yRange=(y_min, y_max),
+            padding=0.0,
+        )
+        self._plot_widget.setAspectLocked(True)
+        return True
+
+    def _current_view_ratio(self, x_range: list[float], y_range: list[float]) -> float:
+        """Return current x/y span ratio with safe fallback."""
+        x_span = max(1e-9, float(x_range[1]) - float(x_range[0]))
+        y_span = max(1e-9, float(y_range[1]) - float(y_range[0]))
+        return x_span / y_span
+
     def add_raster_layer(self, filepath: str, layer_name: Optional[str] = None) -> bool:
         """
         Load a GeoTiff file as a layer.
@@ -1033,8 +1148,9 @@ class MapCanvas(QWidget):
         """Handle mouse move events for coordinate tracking."""
         pos = evt[0]
         if self._plot_widget.sceneBoundingRect().contains(pos):
-            mouse_point = self._view_box.mapSceneToView(pos)
-            self._on_coordinate_hover(mouse_point.x(), mouse_point.y())
+            view_point = self._view_box.mapSceneToView(pos)
+            item_point = self._item_group.mapFromParent(view_point)
+            self._on_coordinate_hover(item_point.x(), item_point.y())
 
     def _on_coordinate_hover(self, x_coord: float, y_coord: float) -> None:
         """Emit coordinate change signal on mouse hover."""

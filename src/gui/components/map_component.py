@@ -99,6 +99,8 @@ class MapComponent(QWidget):
 
         # Map Canvas <-> Layer Panel Sync
         self.layer_panel.sigZoomToLayer.connect(self.map_canvas.zoom_to_layer)
+        self.layer_panel.sigFitLayerToX.connect(self.map_canvas.fit_layer_to_x)
+        self.layer_panel.sigFitLayerToY.connect(self.map_canvas.fit_layer_to_y)
         self.map_canvas.sigLayerAdded.connect(self.layer_panel.add_layer)
         self.map_canvas.sigLayerRemoved.connect(self.layer_panel.remove_layer)
         self.layer_panel.sigLayerDeleted.connect(self.map_canvas.remove_layer)
