@@ -97,3 +97,18 @@ def test_ridge_payload_uses_source_vector_angle_contract(qtbot) -> None:
     assert payload["ridge_direction_source"] == "boundary_x"
     assert payload["ridge_direction_vector"].shape == (2,)
     assert isinstance(payload["rotation_angle_deg"], float)
+
+
+def test_ridge_update_shows_bottom_figure_panel(qtbot) -> None:
+    """Ridge diagnostics update should display the bottom figure panel."""
+    tab = RenameTab()
+    qtbot.addWidget(tab)
+    tab.set_input_bundle(_build_boundary_bundle())
+    tab._ridge_direction_source = "boundary_x"
+    tab._ridge_direction_vector_array = np.asarray([1.0, 0.0], dtype=np.float64)
+    tab._ridge_rotation_angle_deg = -90.0
+
+    tab._pending_update_type = "ridge"
+    tab._on_parameter_update_timeout()
+
+    assert tab.map_component.bottom_panel_host.current_panel_name() == "ridge_figure"

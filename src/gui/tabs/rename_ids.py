@@ -51,6 +51,7 @@ from src.utils.rename_ids.ridge_direction import (
     normalize_direction_vector,
     resolve_direction_vector,
 )
+from src.utils.rename_ids.ridge_detection_controller import RidgeDetectionController
 
 
 def rename_top_tab_keys() -> tuple[str, ...]:
@@ -137,6 +138,14 @@ class RenameTab(TabInterface):
         self._pending_update_type: Optional[str] = None
 
         self._init_controls()
+        self._ridge_figure_panel = RidgeFigurePanel(self)
+        self.map_component.bottom_panel_host.register_panel(
+            "ridge_figure", self._ridge_figure_panel
+        )
+        self._ridge_controller = RidgeDetectionController(
+            map_canvas=self.map_component.map_canvas,
+            figure_panel=self._ridge_figure_panel,
+        )
         self._refresh_ridge_ui_state()
 
     def _init_controls(self) -> None:
@@ -1369,6 +1378,7 @@ class RenameTab(TabInterface):
                 "height": self.spin_height.value(),
             }
             self.sigRidgeParamsChanged.emit(params)
+            self._run_ridge_diagnostics(params)
 
         elif self._pending_update_type == "ordering":
             params = {
@@ -1384,3 +1394,26 @@ class RenameTab(TabInterface):
             self.sigNumberingParamsChanged.emit(params)
 
         self._pending_update_type = None
+
+    def _run_ridge_diagnostics(self, ridge_params: dict[str, Any]) -> None:
+        """Run ridge diagnostics and dispatch figure/map outputs."""
+        if self._input_bundle is None:
+            return
+        direction_vector = ridge_params.get("ridge_direction_vector")
+        if direction_vector is not None:
+            self.map_component.show_panel("ridge_figure")
+        points_gdf = self._input_bundle.get("points_gdf")
+        if not isinstance(points_gdf, gpd.GeoDataFrame):
+            return
+        try:
+            points_array = self._effective_points_array()
+        except Exception:
+            points_array = np.empty((0, 2), dtype=np.float64)
+        self._ridge_controller.update(
+            effective_points_xy=points_array,
+            direction_vector=direction_vector,
+            strength_ratio=float(ridge_params.get("strength", 0.0)),
+            distance=int(ridge_params.get("distance", 1)),
+            height=float(ridge_params.get("height", 0.0)),
+            crs=points_gdf.crs,
+        )
