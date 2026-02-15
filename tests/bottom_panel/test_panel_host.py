@@ -28,7 +28,7 @@ def test_panel_host_register_show_switch_hide_and_unregister(qtbot) -> None:
     assert host.current_panel_name() == "b"
 
     host.hide_panel()
-    assert not host.isVisible()
+    assert host.current_panel_name() == "b"
 
     assert host.unregister_panel("a")
     assert not host.unregister_panel("missing")
@@ -42,10 +42,14 @@ def test_map_component_bottom_panel_default_collapsed_and_switch(qtbot) -> None:
     diagnostics = QLabel("Diagnostics")
     component.bottom_panel_host.register_panel("ridge", diagnostics)
 
-    assert component.bottom_panel_host.isHidden()
+    _, collapsed_height, _ = component.v_splitter.sizes()
+    assert collapsed_height > 0
     assert component.show_panel("ridge")
-    assert not component.bottom_panel_host.isHidden()
+    _, expanded_height, _ = component.v_splitter.sizes()
+    assert expanded_height > collapsed_height
     assert component.bottom_panel_host.current_panel_name() == "ridge"
 
     component.hide_panel()
-    assert component.bottom_panel_host.isHidden()
+    _, next_collapsed_height, _ = component.v_splitter.sizes()
+    assert next_collapsed_height > 0
+    assert next_collapsed_height < expanded_height

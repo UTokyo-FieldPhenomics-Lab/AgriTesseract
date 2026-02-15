@@ -35,7 +35,7 @@ class BottomPanelHost(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._stack)
-        self.hide()
+        self._stack.show()
 
     def register_panel(self, name: str, panel: QWidget) -> bool:
         """Register one panel into host.
@@ -98,13 +98,14 @@ class BottomPanelHost(QWidget):
         if panel is None:
             return False
         self._stack.setCurrentWidget(panel)
+        self._stack.show()
         self._current_name = name
         self.show()
         return True
 
     def hide_panel(self) -> None:
-        """Hide host while keeping registered panels alive."""
-        self.hide()
+        """Hide panel content while keeping host container available."""
+        self._stack.hide()
 
     def current_panel_name(self) -> Optional[str]:
         """Return current panel name.
@@ -207,4 +208,8 @@ class BottomPanelFigure(QWidget):
         x_max : float
             Upper x bound.
         """
-        self.plot_widget.setXRange(float(x_min), float(x_max), padding=0.0)
+        self.plot_widget.getViewBox().setXRange(
+            float(x_min),
+            float(x_max),
+            padding=0.0,
+        )

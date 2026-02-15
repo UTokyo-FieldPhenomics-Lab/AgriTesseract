@@ -26,6 +26,7 @@ class MapComponent(QWidget):
         super().__init__(parent)
         self._is_adjusting_bottom_panel = False
         self._bottom_auto_hide_height_px = 24
+        self._bottom_collapsed_height_px = 8
 
         self._init_ui()
         self._connect_signals()
@@ -125,7 +126,7 @@ class MapComponent(QWidget):
 
     def _on_vertical_splitter_moved(self, _pos: int, _index: int) -> None:
         """Enforce bottom panel behavior after user drags splitter."""
-        if self._is_adjusting_bottom_panel or not self.bottom_panel_host.isVisible():
+        if self._is_adjusting_bottom_panel:
             return
         map_height, panel_height, _ = self.v_splitter.sizes()
         if panel_height <= self._bottom_auto_hide_height_px:
@@ -172,7 +173,10 @@ class MapComponent(QWidget):
         """Hide bottom panel host and return space back to map."""
         self.bottom_panel_host.hide_panel()
         map_height, panel_height, _ = self.v_splitter.sizes()
-        self._apply_vertical_sizes(map_height + panel_height, 0)
+        self._apply_vertical_sizes(
+            map_height + panel_height - self._bottom_collapsed_height_px,
+            self._bottom_collapsed_height_px,
+        )
 
     def cleanup(self):
         """Cleanup resources."""
