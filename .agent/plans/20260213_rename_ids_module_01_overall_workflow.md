@@ -8,8 +8,9 @@
 2. 可选加载 boundary 与 DOM。
 3. 在 Ridge 阶段确定垄方向与垄间距，生成候选 ridge lines。
 4. 在 Ordering 阶段按 ridge 聚类点归属，得到每点 ridge membership。
-5. 在 Numbering 阶段按规则生成 ID，支持编辑点并实时重算归属/编号。
-6. 保存 shapefile 或发送到下一 Tab。
+5. 前置 map_canvas 能力（08A）：补齐点ID文本层和冲突高亮层。
+6. 在 Numbering 阶段按规则生成 ID，支持编辑点并实时重算归属/编号。
+7. 保存 shapefile 或发送到下一 Tab。
 
 ## 统一状态模型
 - `RenameSessionState`:

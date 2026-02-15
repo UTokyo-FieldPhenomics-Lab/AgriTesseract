@@ -1,37 +1,28 @@
-# Rename IDs 模块 08：Map Canvas 渲染、图层切换与 ID 标注
+# Rename IDs 模块 08：Map Canvas 渲染与标注（拆解索引）
 
 ## 目标
-把流程中的可视化层（输入点、ridge、聚类结果、编辑态、文本标注）统一管理，保证交互清晰。
+将原模块08拆为“前置必需能力”和“后续进阶能力”，避免模块06被地图能力阻塞，同时保持长期可扩展性。
 
-## 图层体系建议
-- `dom_background_layers`（始终底层）
-- `input_points_layer`
-- `effective_points_layer`（可选）
-- `ridge_preview_layer`
-- `ordering_colored_layer`
-- `editing_overlay_layer`
-- `id_label_layer`
+## 拆解结果
+- 08A（前置，需插入 05 与 06 之间）：
+  - 文件：`.agent/plans/20260213_rename_ids_module_08a_map_canvas_prereq_for_numbering.md`
+  - 覆盖：点ID文本层（黑字白描边）、冲突高亮层、最小显示联动。
+- 08B（后置，建议在 07 后执行）：
+  - 文件：`.agent/plans/20260213_rename_ids_module_08b_map_canvas_advanced_rendering.md`
+  - 覆盖：图层分组模板、批量更新、防闪烁、标签增强。
 
-## Tab 联动显示策略
-- File：重点显示输入层 + boundary + DOM。
-- Ridge：重点显示 ridge 预览层。
-- Ordering：重点显示聚类着色层，弱化输入层。
-- Numbering：显示最终点 + 文本 ID。
+## 推荐执行顺序（更新后）
+1. 模块 01 总体状态编排
+2. 模块 02 文件输入
+3. 模块 03 方向选择
+4. 模块 04 ridge 峰值与诊断
+5. 模块 05 ordering 归属与着色
+6. 模块 08A map_canvas 前置增强
+7. 模块 06 编号规则与冲突阻断
+8. 模块 07 点编辑与撤销重做
+9. 模块 08B map_canvas 进阶增强
+10. 模块 09 保存与发送
 
-## ID 字段显示
-- 支持选择属性列作为标签字段。
-- 默认 `FID`。
-- 标签紧邻点显示，支持碰撞策略（后续可优化）。
-
-## 关键实现点
-- 统一图层管理器接口：`show/hide/reorder/update_data`。
-- 文本标注单独 layer，避免和点图层混渲染造成性能问题。
-- 颜色与 ridge_id 的映射全流程稳定。
-
-## 风险与对策
-- 标签过多导致卡顿：缩放阈值显示或采样显示。
-- 图层频繁刷新闪烁：增量更新、双缓冲或批量提交。
-
-## 头脑风暴切入点
-- 继续沿用现有 map_canvas 能力，还是抽独立 `rename_canvas_controller`。
-- 标签渲染是否支持描边和缩放自适应字号。
+## 说明
+- 原模块08文档不再承载具体实施步骤，仅作为索引入口。
+- 实施请直接按 08A / 08B 子计划执行。
