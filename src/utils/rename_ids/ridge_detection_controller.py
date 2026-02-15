@@ -15,6 +15,28 @@ from src.utils.rename_ids.ridge_density import (
 )
 
 
+def distance_m_to_peak_bins(distance_m: float, strength_ratio: float) -> int:
+    """Convert min ridge distance in meters to histogram-bin distance.
+
+    Parameters
+    ----------
+    distance_m : float
+        Minimum ridge separation in projected-axis meters.
+    strength_ratio : float
+        Histogram bin width in meters.
+
+    Returns
+    -------
+    int
+        Minimum distance in histogram bins for ``scipy.signal.find_peaks``.
+    """
+    if strength_ratio <= 0:
+        return 1
+    if distance_m <= 0:
+        return 1
+    return max(1, int(np.ceil(distance_m / strength_ratio)))
+
+
 class RidgeDetectionController:
     """Drive ridge diagnostics rendering for panel and map overlay.
 
@@ -44,7 +66,7 @@ class RidgeDetectionController:
         effective_points_xy: np.ndarray,
         direction_vector: np.ndarray | None,
         strength_ratio: float,
-        distance: int,
+        distance: float,
         height: float,
         crs: Any = None,
     ) -> dict[str, Any]:
@@ -72,13 +94,14 @@ class RidgeDetectionController:
         points_array: np.ndarray,
         direction_vector: np.ndarray,
         strength_ratio: float,
-        distance: int,
+        distance: float,
         height: float,
         crs: Any,
     ) -> dict[str, Any]:
         projected_x = project_points_to_perp_axis(points_array, direction_vector)
         x_bins, counts = build_density_histogram(projected_x, strength_ratio)
-        peak_indices, peak_heights = detect_ridge_peaks(counts, distance, height)
+        distance_bins = distance_m_to_peak_bins(distance, strength_ratio)
+        peak_indices, peak_heights = detect_ridge_peaks(counts, distance_bins, height)
         peak_x = x_bins[peak_indices] if len(peak_indices) > 0 else np.asarray([])
         lines_gdf = build_ridge_lines_from_peaks(
             peak_x, points_array, direction_vector, crs

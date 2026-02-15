@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.gui.tabs.rename_ids import RidgeFigurePanel
+from src.gui.tabs.rename_ids import RidgeFigurePanel, projected_x_unit_label
 
 
 def test_ridge_figure_panel_supports_density_and_peaks(qtbot) -> None:
@@ -31,3 +31,20 @@ def test_ridge_figure_panel_supports_density_and_peaks(qtbot) -> None:
     assert np.allclose(peaks_y, peak_h)
     assert x_range[0] == -2.0
     assert x_range[1] == 2.0
+
+
+def test_ridge_figure_panel_updates_projected_x_unit_label(qtbot) -> None:
+    """Ridge panel keeps bottom axis title hidden for compact layout."""
+    panel = RidgeFigurePanel()
+    qtbot.addWidget(panel)
+
+    panel.set_projected_x_unit("m")
+
+    assert panel.plot_widget.getAxis("bottom").labelText == ""
+
+
+def test_projected_x_unit_label_prefers_meter_symbol() -> None:
+    """CRS with meter unit should map axis label unit to m."""
+    from pyproj import CRS
+
+    assert projected_x_unit_label(CRS.from_epsg(3857)) == "m"

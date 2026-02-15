@@ -10,7 +10,7 @@ import numpy as np
 import pyqtgraph as pg
 from shapely.geometry import LineString, MultiLineString, MultiPoint
 
-from PySide6.QtCore import Qt, Slot, Signal, QTimer
+from PySide6.QtCore import Qt, Slot, Signal, QTimer, QEvent
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -31,6 +31,8 @@ from qfluentwidgets import (
     BodyLabel,
     CheckBox,
     InfoBar,
+    InfoBarIcon,
+    Flyout,
     MessageBox,
     qrouter,
 )
@@ -64,6 +66,32 @@ def rename_top_tab_keys() -> tuple[str, ...]:
     )
 
 
+def projected_x_unit_label(crs_obj: Any) -> str:
+    """Resolve projected-axis unit label from CRS metadata.
+
+    Parameters
+    ----------
+    crs_obj : Any
+        CRS object compatible with ``pyproj.CRS`` axis metadata.
+
+    Returns
+    -------
+    str
+        Axis unit label, preferring ``m`` when CRS unit is meter.
+    """
+    if crs_obj is None:
+        return "unit"
+    axis_info = getattr(crs_obj, "axis_info", None)
+    if not axis_info:
+        return "unit"
+    unit_name = str(getattr(axis_info[0], "unit_name", "unit")).lower()
+    if "metre" in unit_name or "meter" in unit_name:
+        return "m"
+    if "degree" in unit_name:
+        return "deg"
+    return unit_name or "unit"
+
+
 class RidgeFigurePanel(BottomPanelFigure):
     """Density and peak diagnostics panel for ridge detection.
 
@@ -76,8 +104,19 @@ class RidgeFigurePanel(BottomPanelFigure):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.plot_widget.setLabel("left", "Count")
-        self.plot_widget.setLabel("bottom", "Projected X")
-        self.plot_widget.setTitle("Ridge Density")
+        self.plot_widget.setLabel("bottom", "")
+        self.plot_widget.setTitle("Ridge Density", size="10pt")
+
+    def set_projected_x_unit(self, unit_text: str) -> None:
+        """Keep projected axis label hidden for compact diagnostics view.
+
+        Parameters
+        ----------
+        unit_text : str
+            Unit suffix displayed as ``Projected X (<unit>)``.
+        """
+        _ = unit_text
+        self.plot_widget.setLabel("bottom", "")
 
 
 class RenameTab(TabInterface):
@@ -94,6 +133,12 @@ class RenameTab(TabInterface):
     sigRidgeParamsChanged = Signal(dict)
     sigOrderingParamsChanged = Signal(dict)
     sigNumberingParamsChanged = Signal(dict)
+
+    _RIDGE_LABEL_TIP_KEYS = {
+        "page.rename.label.strength": "page.rename.tip.strength",
+        "page.rename.label.distance": "page.rename.tip.distance",
+        "page.rename.label.height": "page.rename.tip.height",
+    }
     RIDGE_DIRECTION_SOURCE_LIST = [
         "boundary_x",
         "boundary_y",
@@ -136,6 +181,7 @@ class RenameTab(TabInterface):
 
         # Track which type of parameter changed
         self._pending_update_type: Optional[str] = None
+        self._tip_content_key_by_label: dict[QWidget, str] = {}
 
         self._init_controls()
         self._ridge_figure_panel = RidgeFigurePanel(self)
@@ -259,9 +305,42 @@ class RenameTab(TabInterface):
         layout = QHBoxLayout(wrapper)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        layout.addWidget(BodyLabel(tr(label_key)))
+        label = BodyLabel(tr(label_key))
+        label.setObjectName(f"label_{label_key.replace('.', '_')}")
+        layout.addWidget(label)
+        tip_key = self._RIDGE_LABEL_TIP_KEYS.get(label_key)
+        if tip_key is not None:
+            self._bind_teaching_tip(label, tip_key)
         layout.addWidget(widget)
         return wrapper
+
+    def _bind_teaching_tip(self, label: BodyLabel, content_key: str) -> None:
+        """Bind click-to-show simple flyout to one label."""
+        self._tip_content_key_by_label[label] = content_key
+        label.installEventFilter(self)
+        label.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _show_teaching_tip(self, label: QWidget) -> None:
+        """Show simple flyout for one ridge parameter label."""
+        content_key = self._tip_content_key_by_label.get(label)
+        if content_key is None:
+            return
+        Flyout.create(
+            target=label,
+            icon=InfoBarIcon.SUCCESS,
+            title=tr("page.rename.tip.title"),
+            content=tr(content_key),
+            parent=self,
+        )
+
+    def eventFilter(self, watched: Any, event: QEvent) -> bool:
+        """Handle click-triggered flyouts for ridge parameter labels."""
+        if watched not in self._tip_content_key_by_label:
+            return super().eventFilter(watched, event)
+        if event.type() == QEvent.Type.MouseButtonPress:
+            self._show_teaching_tip(watched)
+            return True
+        return super().eventFilter(watched, event)
 
     # --- Tab Builders ---
 
@@ -312,18 +391,24 @@ class RenameTab(TabInterface):
         self.btn_focus_ridge = PushButton(tr("page.rename.btn.focus_ridge"))
         self.btn_focus_ridge.clicked.connect(self._on_focus_ridge_clicked)
 
-        self.spin_strength = SpinBox()
-        self.spin_strength.setRange(1, 100)
-        self.spin_strength.setValue(10)
+        self.spin_strength = DoubleSpinBox()
+        self.spin_strength.setRange(0.01, 100.0)
+        self.spin_strength.setDecimals(2)
+        self.spin_strength.setSingleStep(0.1)
+        self.spin_strength.setValue(1)
         self.spin_strength.valueChanged.connect(lambda: self._schedule_update("ridge"))
 
-        self.spin_distance = SpinBox()
-        self.spin_distance.setRange(1, 50)
-        self.spin_distance.setValue(3)
+        self.spin_distance = DoubleSpinBox()
+        self.spin_distance.setRange(0.01, 50.0)
+        self.spin_distance.setDecimals(2)
+        self.spin_distance.setSingleStep(0.1)
+        self.spin_distance.setValue(0.5)
         self.spin_distance.valueChanged.connect(lambda: self._schedule_update("ridge"))
 
-        self.spin_height = SpinBox()
-        self.spin_height.setRange(1, 200)
+        self.spin_height = DoubleSpinBox()
+        self.spin_height.setRange(0.1, 200.0)
+        self.spin_height.setDecimals(2)
+        self.spin_height.setSingleStep(0.1)
         self.spin_height.setValue(20)
         self.spin_height.valueChanged.connect(lambda: self._schedule_update("ridge"))
 
@@ -334,6 +419,7 @@ class RenameTab(TabInterface):
         )
         bar.addWidget(self.btn_set_ridge_direction)
         bar.addWidget(self.btn_focus_ridge)
+        bar.addSeparator()
         bar.addWidget(
             self._build_labeled_widget("page.rename.label.strength", self.spin_strength)
         )
@@ -1405,6 +1491,9 @@ class RenameTab(TabInterface):
         points_gdf = self._input_bundle.get("points_gdf")
         if not isinstance(points_gdf, gpd.GeoDataFrame):
             return
+        self._ridge_figure_panel.set_projected_x_unit(
+            projected_x_unit_label(points_gdf.crs)
+        )
         try:
             points_array = self._effective_points_array()
         except Exception:
@@ -1413,7 +1502,7 @@ class RenameTab(TabInterface):
             effective_points_xy=points_array,
             direction_vector=direction_vector,
             strength_ratio=float(ridge_params.get("strength", 0.0)),
-            distance=int(ridge_params.get("distance", 1)),
+            distance=float(ridge_params.get("distance", 1.0)),
             height=float(ridge_params.get("height", 0.0)),
             crs=points_gdf.crs,
         )

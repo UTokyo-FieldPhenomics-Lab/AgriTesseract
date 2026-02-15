@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.utils.rename_ids.ridge_detection_controller import RidgeDetectionController
+from src.utils.rename_ids.ridge_detection_controller import (
+    RidgeDetectionController,
+    distance_m_to_peak_bins,
+)
 
 
 class _FakeFigurePanel:
@@ -137,3 +140,9 @@ def test_controller_clears_when_direction_missing() -> None:
     assert figure_panel.clear_count == 1
     assert map_canvas.remove_calls == ["ridge_detected_lines"]
     assert len(map_canvas.add_calls) == 0
+
+
+def test_distance_m_to_peak_bins_supports_float_params() -> None:
+    """Distance in meters should map to at least one histogram-bin step."""
+    assert distance_m_to_peak_bins(distance_m=0.2, strength_ratio=1.0) == 1
+    assert distance_m_to_peak_bins(distance_m=1.1, strength_ratio=0.5) == 3
