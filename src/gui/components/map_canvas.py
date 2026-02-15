@@ -716,7 +716,27 @@ class MapCanvas(QWidget):
             return False
         if isinstance(value, (str, bytes)):
             return False
+        if MapCanvas._is_scalar_color_tuple(value):
+            return False
         return isinstance(value, Sequence) or isinstance(value, np.ndarray)
+
+    @staticmethod
+    def _is_scalar_color_tuple(value: Any) -> bool:
+        """Return whether value looks like one RGB/RGBA scalar color tuple."""
+        if isinstance(value, np.ndarray):
+            if value.ndim != 1:
+                return False
+            item_list = value.tolist()
+        elif isinstance(value, (tuple, list)):
+            item_list = list(value)
+        else:
+            return False
+        if len(item_list) not in (3, 4):
+            return False
+        return all(
+            isinstance(item, (int, float, np.integer, np.floating))
+            for item in item_list
+        )
 
     def _expand_point_colors(
         self,

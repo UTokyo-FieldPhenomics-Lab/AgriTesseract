@@ -87,3 +87,19 @@ def test_add_point_layer_rejects_invalid_color_list_length(qtbot) -> None:
 
     assert ok is False
     assert "pts" not in canvas._layers
+
+
+def test_add_point_layer_accepts_rgba_tuple_as_single_color(qtbot) -> None:
+    """RGBA tuple should be treated as one color, not per-point list."""
+    canvas = MapCanvas()
+    qtbot.addWidget(canvas)
+
+    ok = canvas.add_point_layer(
+        np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+        "pts",
+        fill_color=(255, 59, 48, 180),
+        border_color="#ff3b30",
+    )
+
+    assert ok is True
+    assert "pts" in canvas._layers
