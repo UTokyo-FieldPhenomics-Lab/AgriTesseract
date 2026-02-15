@@ -29,10 +29,21 @@ def test_build_density_histogram_and_single_peak_detection() -> None:
     peak_indices, peak_heights = detect_ridge_peaks(counts, distance=1, height=2)
     peak_x = x_bins[peak_indices]
 
-    assert np.allclose(x_bins, np.asarray([0.0, 2.0]))
-    assert np.allclose(counts, np.asarray([3, 2]))
+    assert np.allclose(x_bins, np.asarray([0.0, 1.0, 2.0]))
+    assert np.allclose(counts, np.asarray([3, 0, 2]))
     assert np.allclose(peak_x, np.asarray([0.0]))
     assert np.allclose(peak_heights, np.asarray([3.0]))
+
+
+def test_build_density_histogram_keeps_empty_bins_between_ridges() -> None:
+    """Histogram should preserve zero valleys between separated ridges."""
+    projected = np.asarray([-4.1, -3.9, 0.0, 0.1, 4.0, 4.1], dtype=np.float64)
+    x_bins, counts = build_density_histogram(projected, strength_ratio=1.0)
+
+    assert np.allclose(
+        x_bins, np.asarray([-5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0])
+    )
+    assert np.allclose(counts, np.asarray([1, 1, 0, 0, 0, 2, 0, 0, 0, 2]))
 
 
 def test_detect_ridge_peaks_finds_multiple_peaks() -> None:

@@ -83,7 +83,7 @@ class RidgeDetectionController:
         lines_gdf = build_ridge_lines_from_peaks(
             peak_x, points_array, direction_vector, crs
         )
-        self._render_figure(x_bins, counts, peak_x, peak_heights)
+        self._render_figure(x_bins, counts, peak_x, peak_heights, height)
         self._replace_overlay(lines_gdf)
         return self._build_payload(
             x_bins, counts, peak_indices, peak_x, peak_heights, lines_gdf
@@ -95,9 +95,11 @@ class RidgeDetectionController:
         counts: np.ndarray,
         peak_x: np.ndarray,
         peak_heights: np.ndarray,
+        threshold_height: float,
     ) -> None:
         self._figure_panel.set_density_curve(x_bins, counts)
         self._figure_panel.set_peaks(peak_x, peak_heights)
+        self._figure_panel.set_threshold_line(float(threshold_height))
         if len(x_bins) > 0:
             self._figure_panel.set_x_range(float(np.min(x_bins)), float(np.max(x_bins)))
 

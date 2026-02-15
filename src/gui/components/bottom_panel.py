@@ -4,9 +4,44 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
+import darkdetect
 import numpy as np
 import pyqtgraph as pg
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
+from qfluentwidgets import Theme
+
+from src.gui.config import cfg
+
+
+def _plot_theme_palette(is_dark: bool) -> dict[str, str]:
+    """Return plot color palette for current theme.
+
+    Parameters
+    ----------
+    is_dark : bool
+        Whether current UI theme is dark.
+
+    Returns
+    -------
+    dict[str, str]
+        Color tokens for plot background and axis foreground.
+    """
+    if is_dark:
+        return {
+            "background": "#272727",
+            "axis": "#D0D0D0",
+            "curve": "#35C759",
+            "peak": "#FF9F1A",
+            "threshold": "#FF453A",
+        }
+    return {
+        "background": "#FFFFFF",
+        "axis": "#404040",
+        "curve": "#2B8A3E",
+        "peak": "#FF7F0E",
+        "threshold": "#E03131",
+    }
 
 
 class BottomPanelHost(QWidget):
@@ -144,6 +179,8 @@ class BottomPanelFigure(QWidget):
         )
         self.threshold_item: pg.InfiniteLine | None = None
         self._init_ui()
+        self._apply_theme()
+        cfg.themeChanged.connect(self._apply_theme)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -152,6 +189,28 @@ class BottomPanelFigure(QWidget):
         self.plot_widget.showGrid(x=True, y=True, alpha=0.2)
         self.plot_widget.setClipToView(True)
         layout.addWidget(self.plot_widget)
+
+    def _is_dark_theme(self) -> bool:
+        """Return whether current app theme is dark."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            return bool(darkdetect.isDark())
+        return theme == Theme.DARK
+
+    def _apply_theme(self) -> None:
+        """Apply plot colors to match app light/dark themes."""
+        palette = _plot_theme_palette(self._is_dark_theme())
+        self.plot_widget.setBackground(QColor(palette["background"]))
+        axis_pen = pg.mkPen(color=palette["axis"], width=1)
+        for axis_name in ("left", "bottom"):
+            axis_item = self.plot_widget.getPlotItem().getAxis(axis_name)
+            axis_item.setPen(axis_pen)
+            axis_item.setTextPen(axis_pen)
+        self.curve_item.setPen(pg.mkPen(color=palette["curve"], width=2))
+        self.peaks_item.setSymbolPen(pg.mkPen(color=palette["peak"], width=1))
+        self.peaks_item.setSymbolBrush(pg.mkBrush(palette["peak"]))
+        if self.threshold_item is not None:
+            self.threshold_item.setPen(pg.mkPen(color=palette["threshold"], width=1))
 
     def set_density_curve(self, x_bins: np.ndarray, counts: np.ndarray) -> None:
         """Set density curve data.
@@ -187,7 +246,10 @@ class BottomPanelFigure(QWidget):
         line = pg.InfiniteLine(
             pos=float(value),
             angle=0,
-            pen=pg.mkPen(color="#E03131", width=1),
+            pen=pg.mkPen(
+                color=_plot_theme_palette(self._is_dark_theme())["threshold"],
+                width=1,
+            ),
         )
         self.plot_widget.addItem(line)
         self.threshold_item = line

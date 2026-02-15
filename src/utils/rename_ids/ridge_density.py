@@ -90,9 +90,15 @@ def build_density_histogram(
         raise ValueError("projected_x must be 1D")
     if projected_array.size == 0:
         return np.asarray([], dtype=np.float64), np.asarray([], dtype=np.int64)
-    bins = np.floor(projected_array / float(strength_ratio)) * float(strength_ratio)
-    x_bins, counts = np.unique(bins, return_counts=True)
-    return x_bins.astype(np.float64), counts.astype(np.int64)
+    ratio_value = float(strength_ratio)
+    bin_indices = np.floor(projected_array / ratio_value).astype(np.int64)
+    min_index = int(np.min(bin_indices))
+    max_index = int(np.max(bin_indices))
+    full_indices = np.arange(min_index, max_index + 1, dtype=np.int64)
+    offset_indices = bin_indices - min_index
+    counts = np.bincount(offset_indices, minlength=full_indices.size)
+    x_bins = full_indices.astype(np.float64) * ratio_value
+    return x_bins, counts.astype(np.int64)
 
 
 def detect_ridge_peaks(
