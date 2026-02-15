@@ -1,4 +1,4 @@
-"""Pytest path bootstrap for nested rename IDs tests."""
+"""Pytest bootstrap helpers shared by all test domains."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _append_repo_root() -> None:
     """Ensure repository root is present in import path."""
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[1]
     repo_root_text = str(repo_root)
     if repo_root_text in sys.path:
         return
