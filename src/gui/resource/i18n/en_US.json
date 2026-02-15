@@ -158,6 +158,7 @@
     "page.rename.check.ransac": "RANSAC",
     "page.rename.label.residual": "Residual:",
     "page.rename.label.max_trials": "Max Trials:",
+    "page.rename.label.ordering_stats": "Assigned: {assigned} / Ignored: {ignored} / Total: {total}",
     "page.rename.group.num": "Numbering Rules",
     "page.rename.label.format": "Format:",
     "page.rename.combo.rc_plant": "Ridge-Plant",

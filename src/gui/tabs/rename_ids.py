@@ -579,6 +579,7 @@ class RenameTab(TabInterface):
         self._set_ridge_controls_enabled(has_points)
         has_direction = self._ridge_direction_vector_array is not None
         self._set_ridge_param_controls_enabled(has_points and has_direction)
+        self._refresh_ordering_ui_state()
         if has_points:
             return
         self._deactivate_manual_draw_mode(clear_vector=True)
@@ -1036,6 +1037,9 @@ class RenameTab(TabInterface):
         self.spin_trials.setValue(2000)
         self.spin_trials.valueChanged.connect(lambda: self._schedule_update("ordering"))
 
+        self.label_ordering_stats = BodyLabel("")
+        self.label_ordering_stats.setObjectName("label_ordering_stats")
+
         bar.addWidget(
             self._build_labeled_widget("page.rename.label.buffer", self.spin_buffer)
         )
@@ -1046,19 +1050,61 @@ class RenameTab(TabInterface):
         bar.addWidget(
             self._build_labeled_widget("page.rename.label.max_trials", self.spin_trials)
         )
+        bar.addSeparator()
+        bar.addWidget(self.label_ordering_stats)
         bar.addWidget(self._bar_spacer())
         layout.addWidget(bar)
 
         # Link RANSAC enable state to numeric inputs
         self.check_ransac.stateChanged.connect(self._update_ransac_ui_state)
-        self._update_ransac_ui_state()
+        self._set_ordering_stats_text(None)
+        self._refresh_ordering_ui_state()
 
         return tab
 
     def _update_ransac_ui_state(self):
-        enabled = self.check_ransac.isChecked()
+        enabled = self.check_ransac.isEnabled() and self.check_ransac.isChecked()
         self.spin_residual.setEnabled(enabled)
         self.spin_trials.setEnabled(enabled)
+
+    def _set_ordering_controls_enabled(self, enabled: bool) -> None:
+        """Set enabled state for ordering controls by ridge readiness."""
+        self.spin_buffer.setEnabled(enabled)
+        self.check_ransac.setEnabled(enabled)
+        if not enabled:
+            self.spin_residual.setEnabled(False)
+            self.spin_trials.setEnabled(False)
+            return
+        self._update_ransac_ui_state()
+
+    def _refresh_ordering_ui_state(self) -> None:
+        """Refresh ordering controls based on ridge output readiness."""
+        has_points = self._has_points_input()
+        has_direction = self._ridge_direction_vector_array is not None
+        ridge_peak_payload = self._last_ridge_payload.get("ridge_peaks", {})
+        ridge_peaks = np.asarray(ridge_peak_payload.get("peak_x", np.asarray([])))
+        has_ridge_peaks = ridge_peaks.ndim == 1 and ridge_peaks.size > 0
+        self._set_ordering_controls_enabled(
+            has_points and has_direction and has_ridge_peaks
+        )
+
+    def _set_ordering_stats_text(self, stats: dict[str, int] | None) -> None:
+        """Render ordering summary text as assigned, ignored and total counts."""
+        if stats is None:
+            assigned_count = 0
+            ignored_count = 0
+            total_count = 0
+        else:
+            assigned_count = int(stats.get("assigned_points", 0))
+            ignored_count = int(stats.get("ignored_points", 0))
+            total_count = int(stats.get("total_points", 0))
+        self.label_ordering_stats.setText(
+            tr("page.rename.label.ordering_stats").format(
+                assigned=assigned_count,
+                ignored=ignored_count,
+                total=total_count,
+            )
+        )
 
     def _build_numbering_tab(self) -> QWidget:
         """Build Numbering tab with Edit tools."""
@@ -1558,6 +1604,7 @@ class RenameTab(TabInterface):
             crs=points_gdf.crs,
         )
         self._last_ridge_payload = ridge_payload
+        self._refresh_ordering_ui_state()
         self._run_ordering_diagnostics(self._current_ordering_params())
         if direction_vector is not None and apply_focus:
             self._focus_ridge_runtime()
@@ -1587,3 +1634,4 @@ class RenameTab(TabInterface):
             "ordering_result_gdf"
         ]
         self._input_bundle["ordering_stats"] = ordering_payload["ordering_stats"]
+        self._set_ordering_stats_text(ordering_payload["ordering_stats"])

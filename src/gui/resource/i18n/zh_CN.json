@@ -158,6 +158,7 @@
     "page.rename.check.ransac": "RANSAC",
     "page.rename.label.residual": "残差:",
     "page.rename.label.max_trials": "最大尝试:",
+    "page.rename.label.ordering_stats": "已分配: {assigned} / 忽略: {ignored} / 总计: {total}",
     "page.rename.group.num": "编号规则",
     "page.rename.label.format": "格式:",
     "page.rename.combo.rc_plant": "垄号-苗号",

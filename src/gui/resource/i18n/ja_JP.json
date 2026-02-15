@@ -158,6 +158,7 @@
     "page.rename.check.ransac": "RANSAC",
     "page.rename.label.residual": "残差:",
     "page.rename.label.max_trials": "試行回数:",
+    "page.rename.label.ordering_stats": "割当: {assigned} / 除外: {ignored} / 合計: {total}",
     "page.rename.group.num": "番号規則",
     "page.rename.label.format": "形式:",
     "page.rename.combo.rc_plant": "畝-苗",
