@@ -27,6 +27,7 @@ dependencies = [
     "tqdm>=4.66.0",
     # deep learning
     "ultralytics>=8.3.237",
+    "qtawesome>=1.4.1",
 ]
 
 [dependency-groups]

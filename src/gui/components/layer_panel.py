@@ -42,6 +42,7 @@ from src.gui.config import tr, cfg
 from src.gui.components.layer_types import LayerType, normalize_layer_type
 from qfluentwidgets import Theme
 import darkdetect
+import qtawesome as qta
 from pathlib import Path
 
 
@@ -484,13 +485,22 @@ class LayerPanel(QWidget):
         """Emit fit-height request for one layer."""
         self.sigFitLayerToY.emit(name)
 
+    def _is_dark_theme(self):
+        """Check if current theme is dark."""
+        theme = cfg.themeMode.value
+        if theme == Theme.AUTO:
+            return darkdetect.isDark()
+        return theme == Theme.DARK
+
     def _fit_width_icon(self):
         """Return icon enum for fit width action."""
-        return getattr(FIF, "CARE_DOWN_SOLID", FIF.ZOOM_IN)
+        color = "white" if self._is_dark_theme() else "black"
+        return qta.icon("mdi6.arrow-expand-horizontal", color=color, scale_factor=1.2)
 
     def _fit_height_icon(self):
         """Return icon enum for fit height action."""
-        return getattr(FIF, "CARE_RIGHT_SOLID", FIF.ZOOM_IN)
+        color = "white" if self._is_dark_theme() else "black"
+        return qta.icon("mdi6.arrow-expand-vertical", color=color, scale_factor=1.2)
 
     def _delete_layer(self, name: str) -> None:
         """Delete a layer after confirmation."""
